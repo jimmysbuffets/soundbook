@@ -102,8 +102,9 @@ body {
 #song-list {
   flex: 1; overflow-y: auto; padding: 0 18px;
   display: flex; flex-direction: column; gap: 10px;
-  padding-bottom: calc(148px + var(--safe-bottom));
+  padding-bottom: calc(180px + var(--safe-bottom));
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 #song-list::-webkit-scrollbar { display: none; }
 
@@ -112,7 +113,6 @@ body {
   background: var(--bg2); border: 0.5px solid var(--border);
   border-radius: var(--radius);
   transition: border-color 0.2s, box-shadow 0.2s;
-  overflow: hidden;
 }
 .song-card.open { border-color: var(--border2); }
 .song-card.selected {
@@ -194,11 +194,11 @@ body {
 .note-empty { font-style: italic; color: var(--text3); }
 
 .track-row {
-  padding: 10px 14px; border-bottom: 0.5px solid var(--border);
+  padding: 8px 14px; border-bottom: 0.5px solid var(--border);
 }
 .track-main { display: flex; align-items: center; gap: 10px; }
 .play-btn {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 28px; height: 28px; border-radius: 50%;
   background: var(--bg3); border: 0.5px solid var(--border2);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0; color: var(--text2);
@@ -206,7 +206,7 @@ body {
 }
 .play-btn:active { background: var(--bg4); transform: scale(0.94); }
 .play-btn.playing { background: var(--acc); border-color: var(--acc); color: var(--acc-text); }
-.play-btn svg { width: 14px; height: 14px; }
+.play-btn svg { width: 12px; height: 12px; }
 .track-info { flex: 1; min-width: 0; }
 .track-name {
   font-size: 13px; font-weight: 500; color: var(--text);
@@ -215,12 +215,12 @@ body {
 .track-meta { font-size: 11px; color: var(--text3); margin-top: 1px; font-family: var(--mono); }
 .track-dur { font-size: 12px; color: var(--text3); flex-shrink: 0; font-family: var(--mono); }
 .track-note-bub {
-  margin-top: 8px; margin-left: 42px; font-size: 12px; color: var(--text2);
-  background: var(--bg3); padding: 6px 10px; border-radius: 8px;
-  line-height: 1.5; border-left: 2px solid var(--border2);
+  margin-top: 5px; margin-left: 38px; font-size: 12px; color: var(--text2);
+  background: var(--bg3); padding: 5px 9px; border-radius: 7px;
+  line-height: 1.4; border-left: 2px solid var(--border2);
 }
 .track-note-bub.empty { font-style: italic; color: var(--text3); }
-.track-actions { display: flex; gap: 6px; margin-top: 8px; margin-left: 42px; }
+.track-actions { display: flex; gap: 5px; margin-top: 5px; margin-left: 38px; flex-wrap: wrap; }
 .track-act-btn {
   font-size: 11px; padding: 4px 10px; border-radius: 6px;
   border: 0.5px solid var(--border); background: transparent;
@@ -405,7 +405,13 @@ select.finput { appearance: none; }
 #export-all-btn:active { background: var(--bg3); }
 #export-all-btn svg { width: 16px; height: 16px; }
 
-/* playback progress bar */
+/* Track notes collapsed by default, expand on tap */
+.track-note-bub { display: none; }
+.track-row.expanded .track-note-bub { display: block; }
+.track-row.expanded .track-actions { display: flex; }
+.track-actions { display: none; }
+.track-name { cursor: pointer; }
+.track-row.expanded .track-name { color: var(--acc); }
 .progress-bar-wrap {
   height: 3px; background: var(--bg3); border-radius: 2px;
   margin: 6px 0 0 42px; overflow: hidden; cursor: pointer;
@@ -1165,19 +1171,19 @@ function renderSongs(query = '') {
             ? `<span>${esc(s.songNote)}</span>`
             : `<span class="note-empty">No song notes yet</span>`}
         </div>
-        ${s.tracks.map(t => `
-          <div class="track-row">
+        ${s.tracks.map((t, ti) => `
+          <div class="track-row" id="tr-${t.id}" data-action="toggle-track" data-tid="${t.id}">
             <div class="track-main">
               <button class="play-btn" data-action="play-track" data-sid="${s.id}" data-tid="${t.id}" aria-label="Play ${esc(t.name)}">
-                ${t.audioId ? svgPlay() : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>'}
+                ${t.audioId ? svgPlay() : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>'}
               </button>
               <div class="track-info">
-                <div class="track-name">${esc(t.name)}</div>
+                <div class="track-name">${esc(t.name)} <span style="font-size:10px;color:var(--text3);font-family:var(--mono);font-weight:400">${t.note ? '· note' : ''}</span></div>
                 <div class="track-meta">${t.date} · ${t.dur}${t.audioId?' · WAV':' · no audio'}</div>
               </div>
-              <span class="track-dur">${t.dur}</span>
+              <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-right:2px">${ti+1}/${s.tracks.length}</span>
             </div>
-            ${t.audioId ? `<div class="progress-bar-wrap"><div class="progress-bar-fill" data-progress="${t.id}"></div></div>` : ''}
+            ${t.audioId ? `<div class="progress-bar-wrap" style="margin-left:38px"><div class="progress-bar-fill" data-progress="${t.id}"></div></div>` : ''}
             <div class="track-note-bub${t.note?'':' empty'}">${t.note ? esc(t.note) : 'No track notes'}</div>
             <div class="track-actions">
               <button class="track-act-btn" data-action="edit-track" data-sid="${s.id}" data-tid="${t.id}">
@@ -1279,20 +1285,31 @@ document.getElementById('song-list').addEventListener('pointermove', e => {
 
 // ── Sheet controls ──
 function openSaveSheet() {
-  editingSongId = null; addingTrackToId = null;
-  document.getElementById('sheetHeading').textContent = 'Save recording';
-  document.getElementById('destSegWrap').style.display = 'block';
-  document.getElementById('newSongFields').style.display = 'block';
-  document.getElementById('existSongFields').style.display = 'none';
+  // If we were armed for a specific song (via "Add track"), keep that context.
+  // Otherwise reset to a fresh "new song" state.
+  if (addingTrackToId) {
+    const song = songs.find(s => s.id === addingTrackToId);
+    document.getElementById('sheetHeading').textContent = song ? `Add track to "${song.title}"` : 'Add track';
+    document.getElementById('destSegWrap').style.display = 'none';
+    document.getElementById('newSongFields').style.display = 'none';
+    document.getElementById('existSongFields').style.display = 'none';
+  } else {
+    editingSongId = null;
+    document.getElementById('sheetHeading').textContent = 'Save recording';
+    document.getElementById('destSegWrap').style.display = 'block';
+    document.getElementById('newSongFields').style.display = 'block';
+    document.getElementById('existSongFields').style.display = 'none';
+    setDest('new', document.querySelector('.seg-btn'));
+    rebuildSongSelect();
+    document.getElementById('songTitle').value = '';
+    document.getElementById('songNote').value = '';
+  }
   document.getElementById('trackSection').style.display = 'block';
-  setDest('new', document.querySelector('.seg-btn'));
-  rebuildSongSelect();
-  document.getElementById('songTitle').value = '';
-  document.getElementById('songNote').value = '';
   document.getElementById('trackTitle').value = '';
   document.getElementById('trackNote').value = '';
   selTypeTags = []; selAudTags = [];
   rebuildTagGrids();
+  document.getElementById('rec-ctx').textContent = 'tap to record';
   document.getElementById('saveOverlay').classList.add('open');
 }
 
@@ -1328,21 +1345,30 @@ function editSong(songId) {
 }
 
 function startAddTrack(songId) {
+  // Don't open a sheet — arm the recorder for this song instead.
+  // When the user stops recording, the save sheet will open with this song pre-selected.
   addingTrackToId = songId; editingSongId = null;
-  document.getElementById('sheetHeading').textContent = 'Add track';
-  document.getElementById('destSegWrap').style.display = 'none';
-  document.getElementById('newSongFields').style.display = 'none';
-  document.getElementById('existSongFields').style.display = 'none';
-  document.getElementById('trackSection').style.display = 'block';
-  document.getElementById('trackTitle').value = '';
-  document.getElementById('trackNote').value = '';
-  selTypeTags = []; selAudTags = [];
-  rebuildTagGrids();
-  document.getElementById('saveOverlay').classList.add('open');
+  const song = songs.find(s => s.id === songId);
+  const label = song ? `recording for: ${song.title}` : 'ready to record';
+  document.getElementById('rec-ctx').textContent = label;
+  // Scroll to bottom so record button is visible
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  // Brief highlight on the rec button to draw attention
+  const btn = document.getElementById('rec-btn');
+  btn.style.transform = 'scale(1.12)';
+  setTimeout(() => { btn.style.transform = ''; }, 300);
+  toast(`Ready — tap record to add a track to "${song?.title}"`);
 }
 
 function closeSheet(which) {
-  if (which === 'save') document.getElementById('saveOverlay').classList.remove('open');
+  if (which === 'save') {
+    document.getElementById('saveOverlay').classList.remove('open');
+    // If we were armed for a specific song but cancelled, disarm
+    if (addingTrackToId) {
+      addingTrackToId = null;
+      document.getElementById('rec-ctx').textContent = 'tap to record';
+    }
+  }
   if (which === 'editTrack') document.getElementById('editTrackOverlay').classList.remove('open');
 }
 
@@ -1463,7 +1489,14 @@ document.getElementById('song-list').addEventListener('click', e => {
   if (!btn) return;
   const { action, sid, tid } = btn.dataset;
   e.stopPropagation();
-  if (action === 'edit-song')    editSong(sid);
+  if (action === 'toggle-track') {
+    // only toggle if not clicking a child button
+    if (!e.target.closest('button')) {
+      const row = document.getElementById('tr-' + tid);
+      if (row) row.classList.toggle('expanded');
+    }
+    return;
+  }
   if (action === 'share-song')   shareSong(sid);
   if (action === 'delete-song')  deleteSong(sid);
   if (action === 'add-track')    startAddTrack(sid);
