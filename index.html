@@ -366,8 +366,18 @@ select.finput { appearance: none; }
 .mgr-row {
   display: flex; align-items: center; gap: 8px;
   padding: 9px 0; border-bottom: 0.5px solid var(--border);
+  touch-action: none; user-select: none;
+  transition: background 0.15s, opacity 0.15s;
 }
 .mgr-row:last-of-type { border-bottom: none; }
+.mgr-row.dragging { opacity: 0.4; }
+.mgr-row.drag-over { background: var(--bg3); border-radius: var(--radius-sm); }
+.mgr-handle {
+  color: var(--text3); display: flex; align-items: center;
+  padding: 4px 2px; cursor: grab; flex-shrink: 0;
+}
+.mgr-handle:active { cursor: grabbing; }
+.mgr-handle svg { width: 18px; height: 18px; }
 .mgr-lbl { flex: 1; font-size: 14px; color: var(--text); }
 .mgr-del {
   background: none; border: none; cursor: pointer; color: var(--red);
@@ -1413,15 +1423,97 @@ function openManage(kind) {
 
 function renderManageList() {
   const tags = managingKind === 'type' ? typeTags : audTags;
-  document.getElementById('manageList').innerHTML = tags.length
-    ? tags.map((t, i) => `
-        <div class="mgr-row">
-          <span class="mgr-lbl">${esc(t)}</span>
-          <button class="mgr-del" onclick="deleteTag(${i})" aria-label="Remove ${esc(t)}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-          </button>
-        </div>`).join('')
-    : '<p style="color:var(--text3);font-size:13px;padding:8px 0">No tags yet</p>';
+  const list = document.getElementById('manageList');
+  if (!tags.length) {
+    list.innerHTML = '<p style="color:var(--text3);font-size:13px;padding:8px 0">No tags yet</p>';
+    return;
+  }
+  list.innerHTML = tags.map((t, i) => `
+    <div class="mgr-row" data-idx="${i}">
+      <span class="mgr-handle" aria-label="Drag to reorder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/>
+        </svg>
+      </span>
+      <span class="mgr-lbl">${esc(t)}</span>
+      <button class="mgr-del" data-delidx="${i}" aria-label="Remove ${esc(t)}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      </button>
+    </div>`).join('');
+
+  // delete buttons
+  list.querySelectorAll('.mgr-del').forEach(btn => {
+    btn.addEventListener('click', () => deleteTag(parseInt(btn.dataset.delidx)));
+  });
+
+  // drag-to-reorder via touch
+  initTagDrag(list);
+}
+
+function initTagDrag(list) {
+  let dragRow = null, dragIdx = -1, startY = 0, currentY = 0;
+  let rowHeight = 0, rows = [];
+
+  list.addEventListener('pointerdown', e => {
+    const handle = e.target.closest('.mgr-handle');
+    if (!handle) return;
+    dragRow = handle.closest('.mgr-row');
+    if (!dragRow) return;
+
+    rows = Array.from(list.querySelectorAll('.mgr-row'));
+    dragIdx = rows.indexOf(dragRow);
+    rowHeight = dragRow.offsetHeight;
+    startY = e.clientY;
+    currentY = startY;
+
+    dragRow.classList.add('dragging');
+    dragRow.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }, { passive: false });
+
+  list.addEventListener('pointermove', e => {
+    if (!dragRow) return;
+    currentY = e.clientY;
+    const dy = currentY - startY;
+
+    // visual ghost shift
+    dragRow.style.transform = `translateY(${dy}px)`;
+
+    // figure out which slot we're hovering over
+    const newIdx = Math.max(0, Math.min(rows.length - 1,
+      dragIdx + Math.round(dy / rowHeight)
+    ));
+
+    rows.forEach((r, i) => {
+      r.classList.remove('drag-over');
+      if (i === newIdx && r !== dragRow) r.classList.add('drag-over');
+    });
+  });
+
+  const endDrag = async () => {
+    if (!dragRow) return;
+    const dy = currentY - startY;
+    const newIdx = Math.max(0, Math.min(rows.length - 1,
+      dragIdx + Math.round(dy / rowHeight)
+    ));
+
+    dragRow.style.transform = '';
+    dragRow.classList.remove('dragging');
+    rows.forEach(r => r.classList.remove('drag-over'));
+
+    if (newIdx !== dragIdx) {
+      const arr = managingKind === 'type' ? typeTags : audTags;
+      const [moved] = arr.splice(dragIdx, 1);
+      arr.splice(newIdx, 0, moved);
+      await saveSongs();
+      renderManageList();
+      renderAll();
+    }
+    dragRow = null;
+  };
+
+  list.addEventListener('pointerup', endDrag);
+  list.addEventListener('pointercancel', endDrag);
 }
 
 async function deleteTag(idx) {
