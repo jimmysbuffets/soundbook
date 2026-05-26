@@ -110,10 +110,47 @@ body {
 /* ── Song cards ── */
 .song-card {
   background: var(--bg2); border: 0.5px solid var(--border);
-  border-radius: var(--radius); overflow: hidden;
-  transition: border-color 0.2s;
+  border-radius: var(--radius);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  overflow: hidden;
 }
 .song-card.open { border-color: var(--border2); }
+.song-card.selected {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 1px var(--acc);
+}
+
+/* ── Long-press action bar ── */
+#action-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bg2); border-top: 0.5px solid var(--border2);
+  padding: 10px 16px calc(14px + var(--safe-bottom));
+  display: none; flex-direction: column; gap: 8px;
+  z-index: 110;
+  animation: slideUp 0.2s ease;
+}
+#action-bar.visible { display: flex; }
+@keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+#action-bar-title {
+  font-size: 12px; color: var(--text3); font-family: var(--mono);
+  letter-spacing: 0.04em; padding: 0 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#action-bar-btns { display: flex; gap: 8px; }
+.abar-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 5px; padding: 10px 6px;
+  background: var(--bg3); border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font);
+  font-size: 11px; color: var(--text2); transition: all 0.15s;
+}
+.abar-btn:active { background: var(--bg4); }
+.abar-btn svg { width: 18px; height: 18px; }
+.abar-btn.danger { color: var(--red); }
+#action-bar-cancel {
+  text-align: center; padding: 8px; font-size: 13px; color: var(--text3);
+  cursor: pointer; font-family: var(--font);
+}
 .song-header {
   display: flex; align-items: flex-start; gap: 12px;
   padding: 13px 14px; cursor: pointer; user-select: none;
@@ -201,17 +238,6 @@ body {
   transition: background 0.15s;
 }
 .add-track-btn:active { background: var(--bg3); }
-
-.song-footer { display: flex; }
-.foot-btn {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  gap: 5px; padding: 10px 8px; background: transparent; border: none;
-  cursor: pointer; font-size: 12px; color: var(--text3); font-family: var(--font);
-  transition: background 0.15s;
-}
-.foot-btn:active { background: var(--bg3); }
-.foot-btn:not(:last-child) { border-right: 0.5px solid var(--border); }
-.foot-btn.danger { color: var(--red); }
 
 /* ── Record bar ── */
 #rec-bar {
@@ -542,6 +568,26 @@ select.finput { appearance: none; }
 </div>
 
 <div id="toast"></div>
+
+<!-- Long-press action bar -->
+<div id="action-bar">
+  <div id="action-bar-title"></div>
+  <div id="action-bar-btns">
+    <button class="abar-btn" id="abar-edit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit
+    </button>
+    <button class="abar-btn" id="abar-share">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+      Share
+    </button>
+    <button class="abar-btn danger" id="abar-delete">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      Delete
+    </button>
+  </div>
+  <div id="action-bar-cancel" onclick="clearSelection()">Cancel</div>
+</div>
 
 <script>
 // ── IndexedDB ──
@@ -1152,20 +1198,7 @@ function renderSongs(query = '') {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           Add track to this song
         </button>
-        <div class="song-footer">
-          <button class="foot-btn" data-action="edit-song" data-sid="${s.id}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            Edit song
-          </button>
-          <button class="foot-btn" data-action="share-song" data-sid="${s.id}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-            Share song
-          </button>
-          <button class="foot-btn danger" data-action="delete-song" data-sid="${s.id}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-            Delete
-          </button>
-        </div>
+
       </div>
     </div>`).join('');
 }
@@ -1174,10 +1207,75 @@ function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+let selectedSongId = null;
+let longPressTimer = null;
+const LONG_PRESS_MS = 500;
+
 function toggleSong(id) {
+  // accordion — close any other open card first
+  document.querySelectorAll('.song-card.open').forEach(c => {
+    if (c.id !== 'sc-' + id) c.classList.remove('open');
+  });
   const card = document.getElementById('sc-' + id);
   if (card) card.classList.toggle('open');
 }
+
+function selectSong(id) {
+  // deselect previous
+  if (selectedSongId) {
+    const prev = document.getElementById('sc-' + selectedSongId);
+    if (prev) prev.classList.remove('selected');
+  }
+  selectedSongId = id;
+  const card = document.getElementById('sc-' + id);
+  if (card) card.classList.add('selected');
+
+  const song = songs.find(s => s.id === id);
+  document.getElementById('action-bar-title').textContent = song ? song.title : '';
+  document.getElementById('action-bar').classList.add('visible');
+  // hide rec bar while action bar is showing
+  document.getElementById('rec-bar').style.display = 'none';
+
+  document.getElementById('abar-edit').onclick   = () => { clearSelection(); editSong(id); };
+  document.getElementById('abar-share').onclick  = () => { clearSelection(); shareSong(id); };
+  document.getElementById('abar-delete').onclick = () => { clearSelection(); deleteSong(id); };
+}
+
+function clearSelection() {
+  if (selectedSongId) {
+    const card = document.getElementById('sc-' + selectedSongId);
+    if (card) card.classList.remove('selected');
+    selectedSongId = null;
+  }
+  document.getElementById('action-bar').classList.remove('visible');
+  document.getElementById('rec-bar').style.display = '';
+}
+
+// Long press on song headers
+document.getElementById('song-list').addEventListener('pointerdown', e => {
+  const header = e.target.closest('.song-header');
+  if (!header) return;
+  const card = header.closest('.song-card');
+  if (!card) return;
+  const id = card.id.replace('sc-', '');
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null;
+    // vibrate if supported
+    if (navigator.vibrate) navigator.vibrate(40);
+    selectSong(id);
+  }, LONG_PRESS_MS);
+});
+
+document.getElementById('song-list').addEventListener('pointerup', e => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+});
+document.getElementById('song-list').addEventListener('pointercancel', e => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+});
+document.getElementById('song-list').addEventListener('pointermove', e => {
+  // cancel long press if finger moves
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+});
 
 // ── Sheet controls ──
 function openSaveSheet() {
@@ -1351,6 +1449,16 @@ document.getElementById('audFilter').addEventListener('click', e => {
 
 // ── Delegated listener for all song-list buttons (avoids ID quoting bugs) ──
 document.getElementById('song-list').addEventListener('click', e => {
+  // If a song is selected, clicking anywhere outside its card dismisses
+  if (selectedSongId) {
+    const card = e.target.closest('.song-card');
+    if (!card || card.id !== 'sc-' + selectedSongId) { clearSelection(); return; }
+    // clicks inside the selected card still clear selection and do nothing else
+    // (don't expand or trigger actions on a plain tap when selected)
+    const btn = e.target.closest('[data-action]');
+    if (!btn) { clearSelection(); return; }
+  }
+
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   const { action, sid, tid } = btn.dataset;
@@ -1364,6 +1472,9 @@ document.getElementById('song-list').addEventListener('click', e => {
   if (action === 'delete-track') deleteTrack(sid, tid);
   if (action === 'play-track')   playTrack(tid, sid, btn);
 });
+
+// ── Rec bar side buttons also clear selection ──
+document.getElementById('rec-bar').addEventListener('click', () => clearSelection());
 
 // ── Toast ──
 let toastTimer;
