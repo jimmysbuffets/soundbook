@@ -423,10 +423,14 @@ select.finput { appearance: none; }
 .track-name { cursor: pointer; }
 .track-row.expanded .track-name { color: var(--acc); }
 .progress-bar-wrap {
-  height: 3px; background: var(--bg3); border-radius: 2px;
-  margin: 6px 0 0 42px; overflow: hidden; cursor: pointer;
+  height: 20px; display: flex; align-items: center;
+  padding: 8px 0; cursor: pointer; touch-action: none;
 }
-.progress-bar-fill { height: 100%; background: var(--acc); border-radius: 2px; width: 0%; transition: width 0.25s linear; }
+.progress-bar-track {
+  width: 100%; height: 4px; background: var(--bg4);
+  border-radius: 2px; overflow: hidden; position: relative;
+}
+.progress-bar-fill { height: 100%; background: var(--acc); border-radius: 2px; width: 0%; transition: width 0.1s linear; }
 </style>
 </head>
 <body>
@@ -902,14 +906,22 @@ function fmtDate(d) {
 // ── Playback ──
 async function playTrack(trackId, songId, btn) {
   if (currentPlayId === trackId && currentAudio) {
-    currentAudio.pause(); currentAudio = null; currentPlayId = null;
+    currentAudio.pause();
+    currentAudio = null; currentPlayId = null;
     document.querySelectorAll('.play-btn').forEach(b => b.classList.remove('playing'));
-    document.querySelectorAll('.progress-bar-fill').forEach(b => { b.style.width = '0%'; });
+    document.querySelectorAll('.play-btn').forEach(b => { if (b.dataset.tid === trackId) b.innerHTML = svgPlay(); });
+    const fill = document.getElementById('fill-' + trackId);
+    if (fill) fill.style.width = '0%';
     return;
   }
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  document.querySelectorAll('.play-btn').forEach(b => b.classList.remove('playing'));
-  document.querySelectorAll('.progress-bar-fill').forEach(b => { b.style.width = '0%'; });
+  if (currentAudio) {
+    currentAudio.pause();
+    // reset previous play button
+    document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
+    const prevFill = document.getElementById('fill-' + currentPlayId);
+    if (prevFill) prevFill.style.width = '0%';
+    currentAudio = null;
+  }
 
   const song = songs.find(s => s.id === songId);
   if (!song) return;
@@ -919,13 +931,19 @@ async function playTrack(trackId, songId, btn) {
   const audioRec = await dbGet('audio', track.audioId);
   if (!audioRec) { toast('Audio not found'); return; }
 
+  // Auto-expand track row so progress bar is visible
+  const row = document.getElementById('tr-' + trackId);
+  if (row) row.classList.add('expanded');
+
   const url = URL.createObjectURL(audioRec.blob);
   const audio = new Audio(url);
   currentAudio = audio; currentPlayId = trackId;
   btn.classList.add('playing');
   btn.innerHTML = svgPause();
 
-  const fill = document.querySelector(`[data-progress="${trackId}"]`);
+  const fill = document.getElementById('fill-' + trackId);
+  const wrap = document.getElementById('wrap-' + trackId);
+
   audio.ontimeupdate = () => {
     if (fill && audio.duration) fill.style.width = (audio.currentTime / audio.duration * 100) + '%';
   };
@@ -936,6 +954,29 @@ async function playTrack(trackId, songId, btn) {
     URL.revokeObjectURL(url);
     currentAudio = null; currentPlayId = null;
   };
+
+  // Scrubbing — tap/drag on progress bar wrap
+  if (wrap) {
+    wrap.onpointerdown = (e) => {
+      if (!currentAudio || !currentAudio.duration) return;
+      const scrub = (ev) => {
+        const rect = wrap.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+        currentAudio.currentTime = pct * currentAudio.duration;
+        if (fill) fill.style.width = (pct * 100) + '%';
+      };
+      scrub(e);
+      const onMove = ev => scrub(ev);
+      const onUp = () => {
+        wrap.removeEventListener('pointermove', onMove);
+        wrap.removeEventListener('pointerup', onUp);
+      };
+      wrap.addEventListener('pointermove', onMove);
+      wrap.addEventListener('pointerup', onUp);
+      e.preventDefault();
+    };
+  }
+
   audio.play();
 }
 
@@ -1193,7 +1234,7 @@ function renderSongs(query = '') {
               </div>
               <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-right:2px">${ti+1}/${s.tracks.length}</span>
             </div>
-            ${t.audioId ? `<div class="progress-bar-wrap" style="margin-left:38px"><div class="progress-bar-fill" data-progress="${t.id}"></div></div>` : ''}
+            ${t.audioId ? `<div class="progress-bar-wrap" id="wrap-${t.id}" style="margin-left:38px;margin-right:4px"><div class="progress-bar-track"><div class="progress-bar-fill" id="fill-${t.id}"></div></div></div>` : ''}
             <div class="track-note-bub${t.note?'':' empty'}">${t.note ? esc(t.note) : 'No track notes'}</div>
             <div class="track-actions">
               <button class="track-act-btn" data-action="edit-track" data-sid="${s.id}" data-tid="${t.id}">
@@ -1225,7 +1266,6 @@ function esc(str) {
 
 let selectedSongId = null;
 let longPressTimer = null;
-const LONG_PRESS_MS = 500;
 
 function toggleSong(id) {
   // accordion — close any other open card first
@@ -1267,30 +1307,52 @@ function clearSelection() {
   document.getElementById('rec-bar').style.display = '';
 }
 
-// Long press on song headers
-document.getElementById('song-list').addEventListener('pointerdown', e => {
+// Long press on song headers — Android-safe implementation
+// We use touchstart/touchend instead of pointer events to avoid
+// conflicts with Android's native long-press context menu
+const LONG_PRESS_MS = 600;
+const MOVE_THRESHOLD = 10; // px — ignore tiny finger wobble
+
+let longPressStartX = 0, longPressStartY = 0;
+
+document.getElementById('song-list').addEventListener('touchstart', e => {
   const header = e.target.closest('.song-header');
   if (!header) return;
   const card = header.closest('.song-card');
   if (!card) return;
   const id = card.id.replace('sc-', '');
+
+  longPressStartX = e.touches[0].clientX;
+  longPressStartY = e.touches[0].clientY;
+
   longPressTimer = setTimeout(() => {
     longPressTimer = null;
-    // vibrate if supported
-    if (navigator.vibrate) navigator.vibrate(40);
+    if (navigator.vibrate) navigator.vibrate(50);
     selectSong(id);
   }, LONG_PRESS_MS);
+}, { passive: true });
+
+document.getElementById('song-list').addEventListener('touchmove', e => {
+  if (!longPressTimer) return;
+  const dx = e.touches[0].clientX - longPressStartX;
+  const dy = e.touches[0].clientY - longPressStartY;
+  // Only cancel if finger moved significantly
+  if (Math.sqrt(dx*dx + dy*dy) > MOVE_THRESHOLD) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}, { passive: true });
+
+document.getElementById('song-list').addEventListener('touchend', e => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+});
+document.getElementById('song-list').addEventListener('touchcancel', e => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
 });
 
-document.getElementById('song-list').addEventListener('pointerup', e => {
-  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-});
-document.getElementById('song-list').addEventListener('pointercancel', e => {
-  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-});
-document.getElementById('song-list').addEventListener('pointermove', e => {
-  // cancel long press if finger moves
-  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+// Suppress native context menu on song headers (prevents Android popup interfering)
+document.getElementById('song-list').addEventListener('contextmenu', e => {
+  if (e.target.closest('.song-header')) e.preventDefault();
 });
 
 // ── Sheet controls ──
