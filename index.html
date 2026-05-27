@@ -442,26 +442,7 @@ select.finput { appearance: none; }
 .track-actions { display: none; }
 .track-name { cursor: pointer; }
 .track-row.expanded .track-name { color: var(--acc); }
-.progress-bar-wrap {
-  height: 28px; display: flex; align-items: center;
-  cursor: pointer; touch-action: none; user-select: none;
-  -webkit-user-select: none; position: relative;
-}
-.progress-bar-track {
-  width: 100%; height: 5px; background: var(--bg4);
-  border-radius: 3px; position: relative;
-}
-.progress-bar-fill {
-  position: absolute; left: 0; top: 0; height: 100%;
-  background: var(--acc); border-radius: 3px; width: 0%;
-  pointer-events: none;
-}
-.progress-bar-thumb {
-  position: absolute; top: 50%; transform: translate(-50%, -50%);
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--acc); pointer-events: none; left: 0%;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-}
+
 </style>
 </head>
 <body>
@@ -941,18 +922,12 @@ async function playTrack(trackId, songId, btn) {
     currentAudio = null; currentPlayId = null;
     document.querySelectorAll('.play-btn').forEach(b => b.classList.remove('playing'));
     document.querySelectorAll('.play-btn').forEach(b => { if (b.dataset.tid === trackId) b.innerHTML = svgPlay(); });
-    const fill = document.getElementById('fill-' + trackId);
-    if (fill) fill.style.width = '0%';
     return;
   }
   if (currentAudio) {
     currentAudio.pause();
     // reset previous play button
     document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
-    const prevFill  = document.getElementById('fill-'  + currentPlayId);
-    const prevThumb = document.getElementById('thumb-' + currentPlayId);
-    if (prevFill)  prevFill.style.width = '0%';
-    if (prevThumb) prevThumb.style.left = '0%';
     currentAudio = null;
   }
 
@@ -974,21 +949,10 @@ async function playTrack(trackId, songId, btn) {
   btn.classList.add('playing');
   btn.innerHTML = svgPause();
 
-  // Look up fresh every time — elements may not exist until row is expanded+painted
-  function setProgress(pct) {
-    const f = document.getElementById('fill-'  + trackId);
-    const t = document.getElementById('thumb-' + trackId);
-    if (f) f.style.width = (pct * 100) + '%';
-    if (t) t.style.left  = (pct * 100) + '%';
-  }
-
-  audio.ontimeupdate = () => {
-    if (audio.duration) setProgress(audio.currentTime / audio.duration);
-  };
+  audio.ontimeupdate = () => {};
   audio.onended = () => {
     btn.classList.remove('playing');
     btn.innerHTML = svgPlay();
-    setProgress(0);
     URL.revokeObjectURL(url);
     currentAudio = null; currentPlayId = null;
   };
@@ -1250,7 +1214,7 @@ function renderSongs(query = '') {
               </div>
               <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-right:2px">${ti+1}/${s.tracks.length}</span>
             </div>
-            ${t.audioId ? `<div class="progress-bar-wrap" id="wrap-${t.id}" style="margin-left:38px;margin-right:4px"><div class="progress-bar-track"><div class="progress-bar-fill" id="fill-${t.id}"></div><div class="progress-bar-thumb" id="thumb-${t.id}"></div></div></div>` : ''}
+
             <div class="track-note-bub${t.note?'':' empty'}">${t.note ? esc(t.note) : 'No track notes'}</div>
             <div class="track-actions">
               <button class="track-act-btn" data-action="edit-track" data-sid="${s.id}" data-tid="${t.id}">
@@ -1676,54 +1640,7 @@ document.getElementById('song-list').addEventListener('click', e => {
   if (action === 'play-track')   playTrack(tid, sid, btn);
 });
 
-// ── Scrub listener — delegated on song-list, touch-native ──
-(function() {
-  let scrubbing = false;
-  let scrubWrap = null;
 
-  function getScrubPct(touch) {
-    if (!scrubWrap) return null;
-    // Use the inner track element for accurate width
-    const track = scrubWrap.querySelector('.progress-bar-track');
-    const el = track || scrubWrap;
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0) return null;
-    return Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-  }
-
-  function applyScrub(pct) {
-    if (pct === null || !currentAudio || !currentAudio.duration) return;
-    currentAudio.currentTime = pct * currentAudio.duration;
-    // Update via currentPlayId so we always hit the right elements
-    const fill  = document.getElementById('fill-'  + currentPlayId);
-    const thumb = document.getElementById('thumb-' + currentPlayId);
-    if (fill)  fill.style.width = (pct * 100) + '%';
-    if (thumb) thumb.style.left  = (pct * 100) + '%';
-  }
-
-  document.getElementById('song-list').addEventListener('touchstart', e => {
-    // Accept touches on the wrap, track, fill, or thumb
-    const wrap = e.target.closest('.progress-bar-wrap');
-    if (!wrap || !currentAudio) return;
-    scrubbing = true;
-    scrubWrap = wrap;
-    applyScrub(getScrubPct(e.touches[0]));
-    e.preventDefault();
-  }, { passive: false });
-
-  document.getElementById('song-list').addEventListener('touchmove', e => {
-    if (!scrubbing || !scrubWrap) return;
-    applyScrub(getScrubPct(e.touches[0]));
-    e.preventDefault();
-  }, { passive: false });
-
-  document.getElementById('song-list').addEventListener('touchend', () => {
-    scrubbing = false; scrubWrap = null;
-  });
-  document.getElementById('song-list').addEventListener('touchcancel', () => {
-    scrubbing = false; scrubWrap = null;
-  });
-})();
 document.getElementById('rec-bar').addEventListener('click', () => clearSelection());
 
 // ── Toast ──
