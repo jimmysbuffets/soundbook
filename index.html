@@ -974,12 +974,12 @@ async function playTrack(trackId, songId, btn) {
   btn.classList.add('playing');
   btn.innerHTML = svgPause();
 
-  const fill  = document.getElementById('fill-'  + trackId);
-  const thumb = document.getElementById('thumb-' + trackId);
-
+  // Look up fresh every time — elements may not exist until row is expanded+painted
   function setProgress(pct) {
-    if (fill)  fill.style.width = (pct * 100) + '%';
-    if (thumb) thumb.style.left = (pct * 100) + '%';
+    const f = document.getElementById('fill-'  + trackId);
+    const t = document.getElementById('thumb-' + trackId);
+    if (f) f.style.width = (pct * 100) + '%';
+    if (t) t.style.left  = (pct * 100) + '%';
   }
 
   audio.ontimeupdate = () => {
@@ -1677,46 +1677,51 @@ document.getElementById('song-list').addEventListener('click', e => {
 });
 
 // ── Scrub listener — delegated on song-list, touch-native ──
-// Must be separate from the click handler so it can call preventDefault
-// without blocking normal taps elsewhere.
 (function() {
   let scrubbing = false;
+  let scrubWrap = null;
 
-  function getScrubPct(wrap, touch) {
-    const rect = wrap.getBoundingClientRect();
+  function getScrubPct(touch) {
+    if (!scrubWrap) return null;
+    // Use the inner track element for accurate width
+    const track = scrubWrap.querySelector('.progress-bar-track');
+    const el = track || scrubWrap;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0) return null;
     return Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
   }
 
-  function applyScrub(wrap, pct) {
-    if (!currentAudio || !currentAudio.duration) return;
+  function applyScrub(pct) {
+    if (pct === null || !currentAudio || !currentAudio.duration) return;
     currentAudio.currentTime = pct * currentAudio.duration;
-    const tid = wrap.id.replace('wrap-', '');
-    const fill  = document.getElementById('fill-'  + tid);
-    const thumb = document.getElementById('thumb-' + tid);
+    // Update via currentPlayId so we always hit the right elements
+    const fill  = document.getElementById('fill-'  + currentPlayId);
+    const thumb = document.getElementById('thumb-' + currentPlayId);
     if (fill)  fill.style.width = (pct * 100) + '%';
-    if (thumb) thumb.style.left = (pct * 100) + '%';
+    if (thumb) thumb.style.left  = (pct * 100) + '%';
   }
 
   document.getElementById('song-list').addEventListener('touchstart', e => {
+    // Accept touches on the wrap, track, fill, or thumb
     const wrap = e.target.closest('.progress-bar-wrap');
     if (!wrap || !currentAudio) return;
     scrubbing = true;
-    const pct = getScrubPct(wrap, e.touches[0]);
-    applyScrub(wrap, pct);
-    e.preventDefault(); // stop page scroll while scrubbing
+    scrubWrap = wrap;
+    applyScrub(getScrubPct(e.touches[0]));
+    e.preventDefault();
   }, { passive: false });
 
   document.getElementById('song-list').addEventListener('touchmove', e => {
-    if (!scrubbing) return;
-    const wrap = e.target.closest('.progress-bar-wrap');
-    if (!wrap) return;
-    const pct = getScrubPct(wrap, e.touches[0]);
-    applyScrub(wrap, pct);
+    if (!scrubbing || !scrubWrap) return;
+    applyScrub(getScrubPct(e.touches[0]));
     e.preventDefault();
   }, { passive: false });
 
   document.getElementById('song-list').addEventListener('touchend', () => {
-    scrubbing = false;
+    scrubbing = false; scrubWrap = null;
+  });
+  document.getElementById('song-list').addEventListener('touchcancel', () => {
+    scrubbing = false; scrubWrap = null;
   });
 })();
 document.getElementById('rec-bar').addEventListener('click', () => clearSelection());
