@@ -443,14 +443,25 @@ select.finput { appearance: none; }
 .track-name { cursor: pointer; }
 .track-row.expanded .track-name { color: var(--acc); }
 .progress-bar-wrap {
-  height: 20px; display: flex; align-items: center;
-  padding: 8px 0; cursor: pointer; touch-action: none;
+  height: 28px; display: flex; align-items: center;
+  cursor: pointer; touch-action: none; user-select: none;
+  -webkit-user-select: none; position: relative;
 }
 .progress-bar-track {
-  width: 100%; height: 4px; background: var(--bg4);
-  border-radius: 2px; overflow: hidden; position: relative;
+  width: 100%; height: 5px; background: var(--bg4);
+  border-radius: 3px; position: relative;
 }
-.progress-bar-fill { height: 100%; background: var(--acc); border-radius: 2px; width: 0%; transition: width 0.1s linear; }
+.progress-bar-fill {
+  position: absolute; left: 0; top: 0; height: 100%;
+  background: var(--acc); border-radius: 3px; width: 0%;
+  pointer-events: none;
+}
+.progress-bar-thumb {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--acc); pointer-events: none; left: 0%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
 </style>
 </head>
 <body>
@@ -938,8 +949,10 @@ async function playTrack(trackId, songId, btn) {
     currentAudio.pause();
     // reset previous play button
     document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
-    const prevFill = document.getElementById('fill-' + currentPlayId);
-    if (prevFill) prevFill.style.width = '0%';
+    const prevFill  = document.getElementById('fill-'  + currentPlayId);
+    const prevThumb = document.getElementById('thumb-' + currentPlayId);
+    if (prevFill)  prevFill.style.width = '0%';
+    if (prevThumb) prevThumb.style.left = '0%';
     currentAudio = null;
   }
 
@@ -961,41 +974,24 @@ async function playTrack(trackId, songId, btn) {
   btn.classList.add('playing');
   btn.innerHTML = svgPause();
 
-  const fill = document.getElementById('fill-' + trackId);
-  const wrap = document.getElementById('wrap-' + trackId);
+  const fill  = document.getElementById('fill-'  + trackId);
+  const thumb = document.getElementById('thumb-' + trackId);
+
+  function setProgress(pct) {
+    if (fill)  fill.style.width = (pct * 100) + '%';
+    if (thumb) thumb.style.left = (pct * 100) + '%';
+  }
 
   audio.ontimeupdate = () => {
-    if (fill && audio.duration) fill.style.width = (audio.currentTime / audio.duration * 100) + '%';
+    if (audio.duration) setProgress(audio.currentTime / audio.duration);
   };
   audio.onended = () => {
     btn.classList.remove('playing');
     btn.innerHTML = svgPlay();
-    if (fill) fill.style.width = '0%';
+    setProgress(0);
     URL.revokeObjectURL(url);
     currentAudio = null; currentPlayId = null;
   };
-
-  // Scrubbing — tap/drag on progress bar wrap
-  if (wrap) {
-    wrap.onpointerdown = (e) => {
-      if (!currentAudio || !currentAudio.duration) return;
-      const scrub = (ev) => {
-        const rect = wrap.getBoundingClientRect();
-        const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-        currentAudio.currentTime = pct * currentAudio.duration;
-        if (fill) fill.style.width = (pct * 100) + '%';
-      };
-      scrub(e);
-      const onMove = ev => scrub(ev);
-      const onUp = () => {
-        wrap.removeEventListener('pointermove', onMove);
-        wrap.removeEventListener('pointerup', onUp);
-      };
-      wrap.addEventListener('pointermove', onMove);
-      wrap.addEventListener('pointerup', onUp);
-      e.preventDefault();
-    };
-  }
 
   audio.play();
 }
@@ -1254,7 +1250,7 @@ function renderSongs(query = '') {
               </div>
               <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-right:2px">${ti+1}/${s.tracks.length}</span>
             </div>
-            ${t.audioId ? `<div class="progress-bar-wrap" id="wrap-${t.id}" style="margin-left:38px;margin-right:4px"><div class="progress-bar-track"><div class="progress-bar-fill" id="fill-${t.id}"></div></div></div>` : ''}
+            ${t.audioId ? `<div class="progress-bar-wrap" id="wrap-${t.id}" style="margin-left:38px;margin-right:4px"><div class="progress-bar-track"><div class="progress-bar-fill" id="fill-${t.id}"></div><div class="progress-bar-thumb" id="thumb-${t.id}"></div></div></div>` : ''}
             <div class="track-note-bub${t.note?'':' empty'}">${t.note ? esc(t.note) : 'No track notes'}</div>
             <div class="track-actions">
               <button class="track-act-btn" data-action="edit-track" data-sid="${s.id}" data-tid="${t.id}">
@@ -1680,7 +1676,49 @@ document.getElementById('song-list').addEventListener('click', e => {
   if (action === 'play-track')   playTrack(tid, sid, btn);
 });
 
-// ── Rec bar side buttons also clear selection ──
+// ── Scrub listener — delegated on song-list, touch-native ──
+// Must be separate from the click handler so it can call preventDefault
+// without blocking normal taps elsewhere.
+(function() {
+  let scrubbing = false;
+
+  function getScrubPct(wrap, touch) {
+    const rect = wrap.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+  }
+
+  function applyScrub(wrap, pct) {
+    if (!currentAudio || !currentAudio.duration) return;
+    currentAudio.currentTime = pct * currentAudio.duration;
+    const tid = wrap.id.replace('wrap-', '');
+    const fill  = document.getElementById('fill-'  + tid);
+    const thumb = document.getElementById('thumb-' + tid);
+    if (fill)  fill.style.width = (pct * 100) + '%';
+    if (thumb) thumb.style.left = (pct * 100) + '%';
+  }
+
+  document.getElementById('song-list').addEventListener('touchstart', e => {
+    const wrap = e.target.closest('.progress-bar-wrap');
+    if (!wrap || !currentAudio) return;
+    scrubbing = true;
+    const pct = getScrubPct(wrap, e.touches[0]);
+    applyScrub(wrap, pct);
+    e.preventDefault(); // stop page scroll while scrubbing
+  }, { passive: false });
+
+  document.getElementById('song-list').addEventListener('touchmove', e => {
+    if (!scrubbing) return;
+    const wrap = e.target.closest('.progress-bar-wrap');
+    if (!wrap) return;
+    const pct = getScrubPct(wrap, e.touches[0]);
+    applyScrub(wrap, pct);
+    e.preventDefault();
+  }, { passive: false });
+
+  document.getElementById('song-list').addEventListener('touchend', () => {
+    scrubbing = false;
+  });
+})();
 document.getElementById('rec-bar').addEventListener('click', () => clearSelection());
 
 // ── Toast ──
