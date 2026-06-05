@@ -1008,60 +1008,61 @@ function fmtDate(d) {
 
 // ── Playback ──
 async function playTrack(trackId, songId, btn) {
-  // Stop any currently playing track
-  if (currentAudio) {
-    currentAudio.pause();
-    document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
-    currentAudio = null;
-  }
-  if (currentPlayId === trackId) {
-    currentPlayId = null;
-    return;
-  }
-
   const song = songs.find(s => s.id === songId);
   if (!song) return;
   const track = song.tracks.find(t => t.id === trackId);
   if (!track || !track.audioId) { toast('No media recorded for this track'); return; }
 
-  const rec = await dbGet('audio', track.audioId);
-  if (!rec) { toast('Media not found'); return; }
-
-  // Auto-expand track row so player is visible
+  // Auto-expand track row
   const row = document.getElementById('tr-' + trackId);
   if (row) row.classList.add('expanded');
 
-  const url = URL.createObjectURL(rec.blob);
-  currentPlayId = trackId;
-
   if (track.isVideo) {
-    // Load into inline video element
+    // For video: load blob into the native player and let it handle playback.
+    // We do this on a short delay so the row has painted before we touch the player.
     const player = document.getElementById('tvplayer-' + trackId);
     if (!player) { toast('Video player not found'); return; }
-    player.src = url;
-    player.load();
-    player.play();
-    btn.classList.add('playing');
-    currentAudio = player;
-    player.onended = () => {
-      btn.classList.remove('playing');
-      URL.revokeObjectURL(url);
-      currentAudio = null; currentPlayId = null;
-    };
-  } else {
-    const audio = new Audio(url);
-    currentAudio = audio;
-    btn.classList.add('playing');
-    btn.innerHTML = svgPause();
-    audio.ontimeupdate = () => {};
-    audio.onended = () => {
-      btn.classList.remove('playing');
-      btn.innerHTML = svgPlay();
-      URL.revokeObjectURL(url);
-      currentAudio = null; currentPlayId = null;
-    };
-    audio.play();
+    if (!player.src || player.src === window.location.href) {
+      // Only fetch and set src if not already loaded
+      const rec = await dbGet('audio', track.audioId);
+      if (!rec) { toast('Video not found in storage'); return; }
+      const url = URL.createObjectURL(rec.blob);
+      player.src = url;
+      // Revoke after load to free memory (player keeps internal reference)
+      player.onloadeddata = () => URL.revokeObjectURL(url);
+    }
+    // Let the user tap native play button — don't call play() programmatically
+    return;
   }
+
+  // Audio track handling
+  if (currentPlayId === trackId && currentAudio) {
+    currentAudio.pause();
+    currentAudio = null; currentPlayId = null;
+    document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
+    return;
+  }
+  if (currentAudio) {
+    currentAudio.pause();
+    document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
+    currentAudio = null;
+  }
+
+  const rec = await dbGet('audio', track.audioId);
+  if (!rec) { toast('Audio not found'); return; }
+
+  const url = URL.createObjectURL(rec.blob);
+  const audio = new Audio(url);
+  currentAudio = audio; currentPlayId = trackId;
+  btn.classList.add('playing');
+  btn.innerHTML = svgPause();
+  audio.onended = () => {
+    btn.classList.remove('playing');
+    btn.innerHTML = svgPlay();
+    URL.revokeObjectURL(url);
+    currentAudio = null; currentPlayId = null;
+  };
+  audio.play();
 }
 
 function svgPlay() {
@@ -1749,10 +1750,29 @@ document.getElementById('song-list').addEventListener('click', e => {
   const { action, sid, tid } = btn.dataset;
   e.stopPropagation();
   if (action === 'toggle-track') {
-    // only toggle if not clicking a child button
     if (!e.target.closest('button')) {
       const row = document.getElementById('tr-' + tid);
-      if (row) row.classList.toggle('expanded');
+      if (row) {
+        row.classList.toggle('expanded');
+        // If expanding a video track, load the blob into the player now
+        if (row.classList.contains('expanded')) {
+          const player = document.getElementById('tvplayer-' + tid);
+          if (player && (!player.src || player.src === window.location.href)) {
+            // find which song this track belongs to
+            const parentSong = songs.find(s => s.tracks.some(t => t.id === tid));
+            const track = parentSong?.tracks.find(t => t.id === tid);
+            if (track?.isVideo && track.audioId) {
+              dbGet('audio', track.audioId).then(rec => {
+                if (rec) {
+                  const url = URL.createObjectURL(rec.blob);
+                  player.src = url;
+                  player.onloadeddata = () => URL.revokeObjectURL(url);
+                }
+              });
+            }
+          }
+        }
+      }
     }
     return;
   }
