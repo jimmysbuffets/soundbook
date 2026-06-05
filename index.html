@@ -47,6 +47,10 @@ document.getElementById('pwa-manifest').href = URL.createObjectURL(_blob);
   --acc-text: #1a2800;
   --red: #ff5c5c;
   --red-bg: rgba(255,92,92,0.12);
+  --vid: #3DBD72;
+  --vid-bg: rgba(61,189,114,0.12);
+  --tag-blue: #5B9FE8;
+  --tag-blue-bg: rgba(91,159,232,0.12);
   --type-bg: rgba(139,120,255,0.15);
   --type-text: #b8a8ff;
   --type-border: rgba(139,120,255,0.3);
@@ -268,32 +272,53 @@ body {
   z-index: 100;
 }
 #rec-ctx { font-size: 11px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.04em; min-height: 14px; }
-#rec-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
-#rec-btn {
-  width: 62px; height: 62px; border-radius: 50%;
-  background: var(--red); border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 8px var(--red-bg);
-  transition: transform 0.1s, box-shadow 0.3s;
+#rec-row { display: flex; align-items: center; justify-content: center; gap: 16px; }
+
+/* All three buttons same size */
+.rec-bar-btn {
+  width: 58px; height: 58px; border-radius: 50%; border: none;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: transform 0.1s;
+  flex-shrink: 0;
 }
-#rec-btn:active { transform: scale(0.93); }
-#rec-btn.recording { animation: rpulse 1.2s ease-in-out infinite; }
-@keyframes rpulse {
-  0%,100% { box-shadow: 0 0 0 8px var(--red-bg); }
-  50% { box-shadow: 0 0 0 14px rgba(255,92,92,0.05); }
+.rec-bar-btn:active { transform: scale(0.93); }
+
+#tag-btn  { background: var(--tag-blue); box-shadow: 0 0 0 7px var(--tag-blue-bg); }
+#rec-btn  { background: var(--red);      box-shadow: 0 0 0 7px var(--red-bg); }
+#vid-btn  { background: var(--vid);      box-shadow: 0 0 0 7px var(--vid-bg); }
+#tag-btn svg, #rec-btn svg, #vid-btn svg { width: 24px; height: 24px; color: white; }
+
+#rec-btn.recording { animation: rpulse-red 1.2s ease-in-out infinite; }
+#vid-btn.recording { animation: rpulse-vid 1.2s ease-in-out infinite; }
+@keyframes rpulse-red {
+  0%,100% { box-shadow: 0 0 0 7px var(--red-bg); }
+  50%      { box-shadow: 0 0 0 14px rgba(255,92,92,0.04); }
 }
-#rec-icon { width: 26px; height: 26px; color: white; }
-#rec-timer { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--red); min-width: 42px; text-align: center; opacity: 0; transition: opacity 0.2s; }
-#rec-timer.vis { opacity: 1; }
-.side-btn {
-  width: 44px; height: 44px; border-radius: 50%;
-  background: var(--bg2); border: 0.5px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: var(--text2);
-  transition: background 0.15s;
+@keyframes rpulse-vid {
+  0%,100% { box-shadow: 0 0 0 7px var(--vid-bg); }
+  50%      { box-shadow: 0 0 0 14px rgba(61,189,114,0.04); }
 }
-.side-btn:active { background: var(--bg3); }
-.side-btn svg { width: 20px; height: 20px; }
+
+#rec-timer { font-family: var(--mono); font-size: 14px; font-weight: 500; min-width: 42px; text-align: center; opacity: 0; transition: opacity 0.2s; }
+#rec-timer.vis-red { opacity: 1; color: var(--red); }
+#rec-timer.vis-vid { opacity: 1; color: var(--vid); }
+
+/* ── Camera preview ── */
+#cam-preview-wrap {
+  display: none; position: fixed; inset: 0; z-index: 99;
+  background: #000; flex-direction: column; align-items: center; justify-content: center;
+}
+#cam-preview-wrap.visible { display: flex; }
+#cam-preview {
+  width: 100%; max-height: calc(100dvh - 130px);
+  object-fit: cover; background: #000;
+}
+#cam-hint {
+  position: absolute; top: 16px; left: 0; right: 0;
+  text-align: center; font-size: 12px; color: rgba(255,255,255,0.5);
+  font-family: var(--mono); letter-spacing: 0.04em;
+  pointer-events: none;
+}
 
 /* ── Waveform viz ── */
 #waveform-wrap {
@@ -443,6 +468,21 @@ select.finput { appearance: none; }
 .track-name { cursor: pointer; }
 .track-row.expanded .track-name { color: var(--acc); }
 
+/* Video badge */
+.vid-badge {
+  font-size: 10px; padding: 2px 6px; border-radius: 6px; font-weight: 500;
+  background: var(--vid-bg); color: var(--vid); flex-shrink: 0;
+  font-family: var(--mono);
+}
+
+/* Inline video player */
+.track-video {
+  display: none; margin-top: 8px; margin-left: 38px; border-radius: 10px;
+  overflow: hidden; background: #000; max-height: 220px; width: calc(100% - 38px);
+}
+.track-row.expanded .track-video { display: block; }
+.track-video video { width: 100%; max-height: 220px; object-fit: contain; display: block; }
+
 </style>
 </head>
 <body>
@@ -481,20 +521,32 @@ select.finput { appearance: none; }
   <div id="empty">Nothing here yet —<br>hit the red button to record!</div>
 </div>
 
+<!-- Camera preview (full screen, shown while video recording) -->
+<div id="cam-preview-wrap">
+  <video id="cam-preview" autoplay muted playsinline></video>
+  <div id="cam-hint">recording video — tap ■ to stop</div>
+</div>
+
 <!-- Record bar -->
 <div id="rec-bar">
   <div id="rec-ctx">tap to record</div>
   <div id="rec-row">
-    <button class="side-btn" onclick="openSaveSheet()" aria-label="Tag / note">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+    <button class="rec-bar-btn" id="tag-btn" onclick="openSaveSheet()" aria-label="Tags and notes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
     </button>
-    <button id="rec-btn" onclick="toggleRecord()" aria-label="Record">
+    <button class="rec-bar-btn" id="rec-btn" onclick="toggleRecord('audio')" aria-label="Record audio">
       <svg id="rec-icon" viewBox="0 0 24 24" fill="currentColor">
         <circle cx="12" cy="12" r="6"/>
       </svg>
     </button>
-    <button class="side-btn" onclick="openSaveSheet()" aria-label="Notes">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    <button class="rec-bar-btn" id="vid-btn" onclick="toggleRecord('video')" aria-label="Record video">
+      <svg id="vid-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="23 7 16 12 23 17 23 7"/>
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+      </svg>
     </button>
   </div>
   <div id="waveform-wrap">
@@ -760,80 +812,119 @@ async function webmToWav(webmBlob) {
 }
 
 // ── Recording ──
-async function toggleRecord() {
-  if (!recording) {
-    try {
-      recStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 48000,
-          sampleSize: 16,
-          channelCount: 1,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        },
-        video: false
-      });
-    } catch(e) {
-      // fallback to basic if advanced constraints rejected
-      try {
-        recStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      } catch(e2) {
-        toast('Microphone access denied'); return;
-      }
+let recordingMode = null; // 'audio' | 'video'
+
+async function toggleRecord(mode) {
+  // If already recording anything, stop it regardless of which button tapped
+  if (recording) {
+    mediaRecorder.stop();
+    if (recStream) recStream.getTracks().forEach(t => t.stop());
+    clearInterval(recInt);
+    cancelAnimationFrame(animFrame);
+
+    // Hide camera preview if video
+    if (recordingMode === 'video') {
+      document.getElementById('cam-preview-wrap').classList.remove('visible');
+      const preview = document.getElementById('cam-preview');
+      preview.srcObject = null;
     }
 
-    // waveform analyser
+    const activeBtn = recordingMode === 'video'
+      ? document.getElementById('vid-btn')
+      : document.getElementById('rec-btn');
+    activeBtn.classList.remove('recording');
+
+    if (recordingMode === 'audio') {
+      document.getElementById('rec-icon').innerHTML = '<circle cx="12" cy="12" r="6"/>';
+    } else {
+      document.getElementById('vid-icon').innerHTML = '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>';
+    }
+
+    document.getElementById('rec-timer').classList.remove('vis-red','vis-vid');
+    document.getElementById('waveform-wrap').classList.remove('vis');
+    document.getElementById('rec-ctx').textContent = addingTrackToId
+      ? `ready for: ${songs.find(s=>s.id===addingTrackToId)?.title || ''}`
+      : 'tap to record';
+
+    mediaRecorder.onstop = () => openSaveSheet();
+    recording = false;
+    return;
+  }
+
+  // Start recording
+  recordingMode = mode;
+  const isVideo = mode === 'video';
+
+  try {
+    recStream = await navigator.mediaDevices.getUserMedia(isVideo
+      ? { audio: true, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } }
+      : {
+          audio: { sampleRate: 48000, sampleSize: 16, channelCount: 1,
+                   echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+          video: false
+        });
+  } catch(e) {
+    try {
+      // Fallback without constraints
+      recStream = await navigator.mediaDevices.getUserMedia(
+        isVideo ? { audio: true, video: true } : { audio: true, video: false }
+      );
+    } catch(e2) {
+      toast(isVideo ? 'Camera/mic access denied' : 'Microphone access denied');
+      return;
+    }
+  }
+
+  // Show camera preview for video
+  if (isVideo) {
+    const preview = document.getElementById('cam-preview');
+    preview.srcObject = recStream;
+    document.getElementById('cam-preview-wrap').classList.add('visible');
+  }
+
+  // Waveform analyser (audio only — too costly during video)
+  if (!isVideo) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
     const source = audioCtx.createMediaStreamSource(recStream);
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
     source.connect(analyser);
-
-    audioChunks = [];
-    // Pick best available format at highest bitrate
-    const fmtPrefs = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/ogg;codecs=opus',
-      'audio/ogg',
-    ];
-    const mimeType = fmtPrefs.find(f => MediaRecorder.isTypeSupported(f)) || '';
-    const recOpts = mimeType ? { mimeType, audioBitsPerSecond: 128000 } : { audioBitsPerSecond: 128000 };
-    mediaRecorder = new MediaRecorder(recStream, recOpts);
-    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-    mediaRecorder.start(100);
-
-    recording = true; recSecs = 0;
-    document.getElementById('rec-btn').classList.add('recording');
-    document.getElementById('rec-icon').innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
-    document.getElementById('rec-timer').classList.add('vis');
     document.getElementById('waveform-wrap').classList.add('vis');
-    document.getElementById('rec-ctx').textContent = 'recording…';
-
-    recInt = setInterval(() => {
-      recSecs++;
-      const m = Math.floor(recSecs / 60), s = recSecs % 60;
-      document.getElementById('rec-timer').textContent = m + ':' + String(s).padStart(2, '0');
-    }, 1000);
-
     animateWaveform();
-
-  } else {
-    mediaRecorder.stop();
-    recStream.getTracks().forEach(t => t.stop());
-    clearInterval(recInt);
-    cancelAnimationFrame(animFrame);
-
-    document.getElementById('rec-btn').classList.remove('recording');
-    document.getElementById('rec-icon').innerHTML = '<circle cx="12" cy="12" r="6"/>';
-    document.getElementById('rec-timer').classList.remove('vis');
-    document.getElementById('waveform-wrap').classList.remove('vis');
-    document.getElementById('rec-ctx').textContent = 'tap to record';
-
-    mediaRecorder.onstop = () => openSaveSheet();
-    recording = false;
   }
+
+  audioChunks = [];
+  const fmtPrefs = isVideo
+    ? ['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4']
+    : ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg'];
+  const mimeType = fmtPrefs.find(f => MediaRecorder.isTypeSupported(f)) || '';
+  const recOpts = mimeType
+    ? { mimeType, audioBitsPerSecond: 128000, ...(isVideo ? { videoBitsPerSecond: 2500000 } : {}) }
+    : { audioBitsPerSecond: 128000 };
+
+  mediaRecorder = new MediaRecorder(recStream, recOpts);
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  mediaRecorder.start(100);
+
+  recording = true; recSecs = 0;
+
+  const activeBtn = isVideo ? document.getElementById('vid-btn') : document.getElementById('rec-btn');
+  activeBtn.classList.add('recording');
+
+  if (isVideo) {
+    document.getElementById('vid-icon').innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
+  } else {
+    document.getElementById('rec-icon').innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
+  }
+
+  const timer = document.getElementById('rec-timer');
+  timer.classList.add(isVideo ? 'vis-vid' : 'vis-red');
+  document.getElementById('rec-ctx').textContent = isVideo ? 'recording video…' : 'recording…';
+
+  recInt = setInterval(() => {
+    recSecs++;
+    timer.textContent = Math.floor(recSecs/60) + ':' + String(recSecs%60).padStart(2,'0');
+  }, 1000);
 }
 
 function animateWaveform() {
@@ -856,21 +947,21 @@ async function saveMemo() {
   const capturedSecs = recSecs;
   recSecs = 0;
 
-  // save audio blob
+  const isVideo = recordingMode === 'video';
   let audioId = null;
   if (audioChunks.length > 0) {
-    const webmBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
-    audioId = 'audio_' + Date.now();
-    await dbPut('audio', { id: audioId, blob: webmBlob });
+    const blob = new Blob(audioChunks, { type: audioChunks[0]?.type || (isVideo ? 'video/webm' : 'audio/webm') });
+    audioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
+    await dbPut('audio', { id: audioId, blob, isVideo });
     audioChunks = [];
   }
 
-  const trackTitle = document.getElementById('trackTitle').value.trim() || 'New track';
+  const trackTitle = document.getElementById('trackTitle').value.trim() || (isVideo ? 'Video take' : 'New track');
   const trackNote = document.getElementById('trackNote').value.trim();
   const newTrack = {
     id: 'tr_' + Date.now(),
     name: trackTitle, dur, date: fmtDate(new Date()),
-    note: trackNote, audioId
+    note: trackNote, audioId, isVideo
   };
 
   if (editingSongId) {
@@ -917,47 +1008,60 @@ function fmtDate(d) {
 
 // ── Playback ──
 async function playTrack(trackId, songId, btn) {
-  if (currentPlayId === trackId && currentAudio) {
-    currentAudio.pause();
-    currentAudio = null; currentPlayId = null;
-    document.querySelectorAll('.play-btn').forEach(b => b.classList.remove('playing'));
-    document.querySelectorAll('.play-btn').forEach(b => { if (b.dataset.tid === trackId) b.innerHTML = svgPlay(); });
-    return;
-  }
+  // Stop any currently playing track
   if (currentAudio) {
     currentAudio.pause();
-    // reset previous play button
     document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
     currentAudio = null;
+  }
+  if (currentPlayId === trackId) {
+    currentPlayId = null;
+    return;
   }
 
   const song = songs.find(s => s.id === songId);
   if (!song) return;
   const track = song.tracks.find(t => t.id === trackId);
-  if (!track || !track.audioId) { toast('No audio recorded for this track'); return; }
+  if (!track || !track.audioId) { toast('No media recorded for this track'); return; }
 
-  const audioRec = await dbGet('audio', track.audioId);
-  if (!audioRec) { toast('Audio not found'); return; }
+  const rec = await dbGet('audio', track.audioId);
+  if (!rec) { toast('Media not found'); return; }
 
-  // Auto-expand track row so progress bar is visible
+  // Auto-expand track row so player is visible
   const row = document.getElementById('tr-' + trackId);
   if (row) row.classList.add('expanded');
 
-  const url = URL.createObjectURL(audioRec.blob);
-  const audio = new Audio(url);
-  currentAudio = audio; currentPlayId = trackId;
-  btn.classList.add('playing');
-  btn.innerHTML = svgPause();
+  const url = URL.createObjectURL(rec.blob);
+  currentPlayId = trackId;
 
-  audio.ontimeupdate = () => {};
-  audio.onended = () => {
-    btn.classList.remove('playing');
-    btn.innerHTML = svgPlay();
-    URL.revokeObjectURL(url);
-    currentAudio = null; currentPlayId = null;
-  };
-
-  audio.play();
+  if (track.isVideo) {
+    // Load into inline video element
+    const player = document.getElementById('tvplayer-' + trackId);
+    if (!player) { toast('Video player not found'); return; }
+    player.src = url;
+    player.load();
+    player.play();
+    btn.classList.add('playing');
+    currentAudio = player;
+    player.onended = () => {
+      btn.classList.remove('playing');
+      URL.revokeObjectURL(url);
+      currentAudio = null; currentPlayId = null;
+    };
+  } else {
+    const audio = new Audio(url);
+    currentAudio = audio;
+    btn.classList.add('playing');
+    btn.innerHTML = svgPause();
+    audio.ontimeupdate = () => {};
+    audio.onended = () => {
+      btn.classList.remove('playing');
+      btn.innerHTML = svgPlay();
+      URL.revokeObjectURL(url);
+      currentAudio = null; currentPlayId = null;
+    };
+    audio.play();
+  }
 }
 
 function svgPlay() {
@@ -984,15 +1088,21 @@ async function shareTrack(songId, trackId) {
     return;
   }
 
-  toast('Preparing WAV…');
+  toast(track.isVideo ? 'Preparing video…' : 'Preparing WAV…');
   const audioRec = await dbGet('audio', track.audioId);
-  if (!audioRec) { toast('Audio not found'); return; }
+  if (!audioRec) { toast('Media not found'); return; }
 
   try {
-    const wavBlob = await webmToWav(audioRec.blob);
-    const filename = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi, '_') + '.wav';
-    const file = new File([wavBlob], filename, { type: 'audio/wav' });
-    const notesFile = new File([meta], filename.replace('.wav', '_notes.txt'), { type: 'text/plain' });
+    let shareBlob, filename;
+    if (track.isVideo) {
+      shareBlob = audioRec.blob;
+      filename = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi, '_') + '.webm';
+    } else {
+      shareBlob = await webmToWav(audioRec.blob);
+      filename = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi, '_') + '.wav';
+    }
+    const file = new File([shareBlob], filename, { type: shareBlob.type || 'application/octet-stream' });
+    const notesFile = new File([meta], filename.replace(/\.(wav|webm)$/, '_notes.txt'), { type: 'text/plain' });
 
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ title: track.name, files: [file, notesFile] });
@@ -1033,9 +1143,15 @@ async function shareSong(songId) {
     for (const track of tracksWithAudio) {
       const audioRec = await dbGet('audio', track.audioId);
       if (!audioRec) continue;
-      const wavBlob = await webmToWav(audioRec.blob);
-      const fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.wav';
-      files.push(new File([wavBlob], fname, { type: 'audio/wav' }));
+      let blob, fname;
+      if (track.isVideo) {
+        blob = audioRec.blob;
+        fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.webm';
+      } else {
+        blob = await webmToWav(audioRec.blob);
+        fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.wav';
+      }
+      files.push(new File([blob], fname, { type: blob.type || 'application/octet-stream' }));
     }
 
     if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
@@ -1071,9 +1187,15 @@ async function exportAll() {
         if (track.audioId) {
           const audioRec = await dbGet('audio', track.audioId);
           if (audioRec) {
-            const wavBlob = await webmToWav(audioRec.blob);
-            const fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.wav';
-            files.push(new File([wavBlob], fname, { type: 'audio/wav' }));
+            let blob, fname;
+            if (track.isVideo) {
+              blob = audioRec.blob;
+              fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.webm';
+            } else {
+              blob = await webmToWav(audioRec.blob);
+              fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.wav';
+            }
+            files.push(new File([blob], fname, { type: blob.type || 'application/octet-stream' }));
           }
         }
       }
@@ -1205,16 +1327,19 @@ function renderSongs(query = '') {
         ${s.tracks.map((t, ti) => `
           <div class="track-row" id="tr-${t.id}" data-action="toggle-track" data-tid="${t.id}">
             <div class="track-main">
-              <button class="play-btn" data-action="play-track" data-sid="${s.id}" data-tid="${t.id}" aria-label="Play ${esc(t.name)}">
-                ${t.audioId ? svgPlay() : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>'}
+              <button class="play-btn${t.isVideo?' vid-play-btn':''}" data-action="play-track" data-sid="${s.id}" data-tid="${t.id}" aria-label="Play ${esc(t.name)}">
+                ${t.isVideo
+                  ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>'
+                  : (t.audioId ? svgPlay() : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>')}
               </button>
               <div class="track-info">
                 <div class="track-name">${esc(t.name)} <span style="font-size:10px;color:var(--text3);font-family:var(--mono);font-weight:400">${t.note ? '· note' : ''}</span></div>
-                <div class="track-meta">${t.date} · ${t.dur}${t.audioId?' · WAV':' · no audio'}</div>
+                <div class="track-meta">${t.date} · ${t.dur} · ${t.isVideo ? 'video' : (t.audioId ? 'audio' : 'no audio')}</div>
               </div>
+              ${t.isVideo ? '<span class="vid-badge">video</span>' : ''}
               <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-right:2px">${ti+1}/${s.tracks.length}</span>
             </div>
-
+            ${t.isVideo && t.audioId ? `<div class="track-video" id="tvid-${t.id}"><video id="tvplayer-${t.id}" controls playsinline preload="none" style="width:100%;max-height:220px;object-fit:contain;display:block;background:#000;border-radius:8px"></video></div>` : ''}
             <div class="track-note-bub${t.note?'':' empty'}">${t.note ? esc(t.note) : 'No track notes'}</div>
             <div class="track-actions">
               <button class="track-act-btn" data-action="edit-track" data-sid="${s.id}" data-tid="${t.id}">
