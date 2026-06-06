@@ -20,7 +20,7 @@ const _manifest = {
   display: "standalone",
   background_color: "#0f0f0f",
   theme_color: "#0f0f0f",
-  orientation: "portrait",
+  orientation: "any",
   icons: [
     { src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAE8ElEQVR42u3dr5PNURzGcd8zGzavspoqUERVQyQJghmjCP4QQdkxIwgSEU0VFYKq2WLzNhKza6179/r+OOc8r3diZoe95zzv83zO3evr3DkAAAAAAAAA6JrBEkzHzu72j7H+rIP9Q3tFgL5DTg4CCDwhCCDwhCCA0JOBAEJPBgIIPRkIIPhEIIDgE4EAQk+G8SjCj+R1HGwYkttgEHwkizAIPpJFKMKP5PUfLDyS26AIP5L3pVhkJO/PYGGRPBIV4UfyvhWLiOT9GywckkeiIvxI3tdikZC8v8XiIHmfi0VB8n4Xi4HkfS8WAcn7X4QfyRIU4UeyBEX4kSxBEX4kS1AsOZIpPdsNLVCNAMKPGvNShB/JErgDwB3A6Y/UFijCj2QJivAjWQJ3ALgDOP2R2gJF+JEsgREIRiCnP1JbQANAAzj9kdoCGgAawOlfPwf7hxZhgtwNwt9W8Hd2ty3KyTXaOMdGIE1gBAIJCGD8IUHgXUADkEADOP1JkNoCGqC9jSbB0g3g9K9TgnQRNsmlBuhIAm1gBCIBphXA+ONO0NMYpAGgAaAFCGD8IUHgGKQBOpZgZ3dbExAgVwLhH1EA40+7TZAowrp51QAhaAMCuBSTgADAmQUw/2uBXu8BGgAaAFqAACABAcz/KRKk/JR4VX41QKgEGoAAmoAIBIAGgBYgALJJlYAAWiBagmHFInkLdELu3rx17Pcv375ZGcqxnwRx9M//9dZoj0+bOO0R6l0J4K295dqjVQGMQIhmy8k0DR/evV35NXt7z479/uHDBye+5tLV67O8xtT/iWbLGTB+sJf++6/duLnR4XFUgl7vAgSoNNi1SJL2uMUtwV6Wp89fn/j1l4/vq1mXTdqkJZp9F6j1E/vP2X5d5pBjE2oXpZm3Qf8n2JuGCvNJuJQo3gYFer8D1DgejN1KtY5AraIBGgo/CCD8IABAAKc/XILzglfDa+zpIt6cAJ8/f3JsVbwHly9fIcBSvHrxpIrv4869x12/PiPQgrR2whg7Gr4En/bjY6Al/pVjH4d28msACD8BUFVwhd8l+Mz09HOAml9LT3JqAGgAo8dyp/qj+7d///pvT4XAwgIc7B8OnhA3jaB/PhYF47PqrXwjEDRAS7T0WaCxfmqd+JpdgoEZWPujDnPdAzwVor27zFmY86kQ63yURwPAHcDJtAzrPBwX7gDA8gL4aDRaYt28agBoAIAAxiCEjT8aAPH4KMSE+ChEh3cAYxB6GX+abIDEx6KkPgqmygYA4gUwBqGH8UcDQAPMaRtQ0+mvAaABlrAOqOH01wDQAJYABDAGIXD8Ga0BSIAWw28EghGoJhuBufOmARDN6Kf2/z5A6+L5C3alY75+/1bVtKEB4A5Q42wGzJGv0sI3CUyVKyMQXIKnwv8sg9qnitLiNw3hb2YEIgFqzo87AKIpPVgMp3/1DUAC1JiX0uOLgvC7AwA1CqAFUFM+SsKLhPBXNwKRADXkoSS+aAh/NZdgEgh/1CWYBKhp34vFQPJ+F4uC5H0uFgfJ+1ssEpL3tfqg+Vdlgh/XANpA+AlAAuE3AhmJBF8DaAP7QwAS2BcjkJFI8DWANrD+GkAbCD4BiCD4BCCC4CffAdwPrKMG0AhCTwAiCD4BiCD4BCCD0BOADEJPADIIPQHihBB4AkQJIfAE6F4OIQcAAAAAAAA25ScKjo4WVIp9sAAAAABJRU5ErkJggg==", sizes: "192x192", type: "image/png", purpose: "any maskable" },
     { src: "data:image/png;base64,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", sizes: "512x512", type: "image/png", purpose: "any maskable" }
@@ -306,16 +306,16 @@ body {
 /* ── Camera preview ── */
 #cam-preview-wrap {
   display: none; position: fixed; inset: 0; z-index: 99;
-  background: #000; flex-direction: column; align-items: center; justify-content: center;
+  background: #000;
 }
-#cam-preview-wrap.visible { display: flex; }
+#cam-preview-wrap.visible { display: block; }
 #cam-preview {
-  width: 100%; max-height: calc(100dvh - 130px);
-  object-fit: cover; background: #000;
+  width: 100%; height: 100%;
+  object-fit: cover; background: #000; display: block;
 }
 #cam-hint {
-  position: absolute; top: 16px; left: 0; right: 0;
-  text-align: center; font-size: 12px; color: rgba(255,255,255,0.5);
+  position: absolute; bottom: calc(16px + var(--safe-bottom)); left: 0; right: 0;
+  text-align: center; font-size: 13px; color: rgba(255,255,255,0.6);
   font-family: var(--mono); letter-spacing: 0.04em;
   pointer-events: none;
 }
@@ -494,10 +494,17 @@ select.finput { appearance: none; }
 /* Inline video player */
 .track-video {
   display: none; margin-top: 8px; margin-left: 38px; border-radius: 10px;
-  overflow: hidden; background: #000; max-height: 220px; width: calc(100% - 38px);
+  overflow: hidden; background: #000; width: calc(100% - 38px - 4px);
 }
 .track-row.expanded .track-video { display: block; }
-.track-video video { width: 100%; max-height: 220px; object-fit: contain; display: block; }
+.track-video video { width: 100%; max-height: 240px; object-fit: contain; display: block; }
+
+/* Native audio player */
+.track-audio {
+  display: none; margin-top: 8px; margin-left: 38px; width: calc(100% - 38px - 4px);
+}
+.track-row.expanded .track-audio { display: block; }
+.track-audio audio { width: 100%; height: 36px; }
 
 </style>
 </head>
@@ -888,7 +895,11 @@ async function toggleRecord(mode) {
 
   try {
     recStream = await navigator.mediaDevices.getUserMedia(isVideo
-      ? { audio: true, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } }
+      ? {
+          audio: { sampleRate: 48000, sampleSize: 16, channelCount: 1,
+                   echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+        }
       : {
           audio: { sampleRate: 48000, sampleSize: 16, channelCount: 1,
                    echoCancellation: false, noiseSuppression: false, autoGainControl: false },
@@ -1038,62 +1049,30 @@ function fmtDate(d) {
 }
 
 // ── Playback ──
-async function playTrack(trackId, songId, btn) {
-  const song = songs.find(s => s.id === songId);
-  if (!song) return;
-  const track = song.tracks.find(t => t.id === trackId);
-  if (!track || !track.audioId) { toast('No media recorded for this track'); return; }
+async function loadTrackPlayer(track) {
+  if (!track?.audioId) return;
+  const playerId = track.isVideo ? 'tvplayer-' + track.id : 'taplayer-' + track.id;
+  const player = document.getElementById(playerId);
+  if (!player) return;
+  // Only load once
+  if (player.src && player.src !== window.location.href && player.src !== '') return;
+  const rec = await dbGet('audio', track.audioId);
+  if (!rec) { toast('Media not found in storage'); return; }
+  const url = URL.createObjectURL(rec.blob);
+  player.src = url;
+  player.onloadeddata = () => URL.revokeObjectURL(url);
+}
 
-  // Auto-expand track row
+async function playTrack(trackId, songId, btn) {
+  // Just expand the row — native players handle everything
   const row = document.getElementById('tr-' + trackId);
   if (row) row.classList.add('expanded');
 
-  if (track.isVideo) {
-    // For video: load blob into the native player and let it handle playback.
-    // We do this on a short delay so the row has painted before we touch the player.
-    const player = document.getElementById('tvplayer-' + trackId);
-    if (!player) { toast('Video player not found'); return; }
-    if (!player.src || player.src === window.location.href) {
-      // Only fetch and set src if not already loaded
-      const rec = await dbGet('audio', track.audioId);
-      if (!rec) { toast('Video not found in storage'); return; }
-      const url = URL.createObjectURL(rec.blob);
-      player.src = url;
-      // Revoke after load to free memory (player keeps internal reference)
-      player.onloadeddata = () => URL.revokeObjectURL(url);
-    }
-    // Let the user tap native play button — don't call play() programmatically
-    return;
-  }
+  const song = songs.find(s => s.id === songId);
+  const track = song?.tracks.find(t => t.id === trackId);
+  if (!track?.audioId) { toast('No media recorded for this track'); return; }
 
-  // Audio track handling
-  if (currentPlayId === trackId && currentAudio) {
-    currentAudio.pause();
-    currentAudio = null; currentPlayId = null;
-    document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
-    return;
-  }
-  if (currentAudio) {
-    currentAudio.pause();
-    document.querySelectorAll('.play-btn.playing').forEach(b => { b.classList.remove('playing'); b.innerHTML = svgPlay(); });
-    currentAudio = null;
-  }
-
-  const rec = await dbGet('audio', track.audioId);
-  if (!rec) { toast('Audio not found'); return; }
-
-  const url = URL.createObjectURL(rec.blob);
-  const audio = new Audio(url);
-  currentAudio = audio; currentPlayId = trackId;
-  btn.classList.add('playing');
-  btn.innerHTML = svgPause();
-  audio.onended = () => {
-    btn.classList.remove('playing');
-    btn.innerHTML = svgPlay();
-    URL.revokeObjectURL(url);
-    currentAudio = null; currentPlayId = null;
-  };
-  audio.play();
+  await loadTrackPlayer(track);
 }
 
 function svgPlay() {
@@ -1360,9 +1339,11 @@ function renderSongs(query = '') {
           <div class="track-row" id="tr-${t.id}" data-action="toggle-track" data-tid="${t.id}">
             <div class="track-main">
               <button class="play-btn${t.isVideo?' vid-play-btn':''}" data-action="play-track" data-sid="${s.id}" data-tid="${t.id}" aria-label="Play ${esc(t.name)}">
-                ${t.isVideo
+              ${t.isVideo
                   ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>'
-                  : (t.audioId ? svgPlay() : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>')}
+                  : (t.audioId
+                      ? svgPlay()
+                      : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>')}
               </button>
               <div class="track-info">
                 <div class="track-name">${esc(t.name)} <span style="font-size:10px;color:var(--text3);font-family:var(--mono);font-weight:400">${t.note ? '· note' : ''}</span></div>
@@ -1371,7 +1352,8 @@ function renderSongs(query = '') {
               ${t.isVideo ? '<span class="vid-badge">video</span>' : ''}
               <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-right:2px">${ti+1}/${s.tracks.length}</span>
             </div>
-            ${t.isVideo && t.audioId ? `<div class="track-video" id="tvid-${t.id}"><video id="tvplayer-${t.id}" controls playsinline preload="none" style="width:100%;max-height:220px;object-fit:contain;display:block;background:#000;border-radius:8px"></video></div>` : ''}
+            ${t.isVideo && t.audioId ? `<div class="track-video" id="tvid-${t.id}"><video id="tvplayer-${t.id}" controls playsinline preload="none" style="width:100%;max-height:240px;object-fit:contain;display:block;background:#000;border-radius:8px"></video></div>` : ''}
+            ${!t.isVideo && t.audioId ? `<div class="track-audio" id="taud-${t.id}"><audio id="taplayer-${t.id}" controls preload="none" style="width:100%"></audio></div>` : ''}
             <div class="track-note-bub${t.note?'':' empty'}">${t.note ? esc(t.note) : 'No track notes'}</div>
             <div class="track-actions">
               <button class="track-act-btn" data-action="edit-track" data-sid="${s.id}" data-tid="${t.id}">
@@ -1810,23 +1792,10 @@ document.getElementById('song-list').addEventListener('click', e => {
       const row = document.getElementById('tr-' + tid);
       if (row) {
         row.classList.toggle('expanded');
-        // If expanding a video track, load the blob into the player now
         if (row.classList.contains('expanded')) {
-          const player = document.getElementById('tvplayer-' + tid);
-          if (player && (!player.src || player.src === window.location.href)) {
-            // find which song this track belongs to
-            const parentSong = songs.find(s => s.tracks.some(t => t.id === tid));
-            const track = parentSong?.tracks.find(t => t.id === tid);
-            if (track?.isVideo && track.audioId) {
-              dbGet('audio', track.audioId).then(rec => {
-                if (rec) {
-                  const url = URL.createObjectURL(rec.blob);
-                  player.src = url;
-                  player.onloadeddata = () => URL.revokeObjectURL(url);
-                }
-              });
-            }
-          }
+          const parentSong = songs.find(s => s.tracks.some(t => t.id === tid));
+          const track = parentSong?.tracks.find(t => t.id === tid);
+          if (track?.audioId) loadTrackPlayer(track);
         }
       }
     }
