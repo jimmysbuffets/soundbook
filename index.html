@@ -408,7 +408,23 @@ select.finput { appearance: none; }
 .save-btn:active { opacity: 0.85; }
 
 /* manage tags */
-.mgr-row {
+.picker-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 4px; border-bottom: 0.5px solid var(--border);
+  cursor: pointer; border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+.picker-row:last-of-type { border-bottom: none; }
+.picker-row:active { background: var(--bg3); }
+.picker-row-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--bg3); display: flex; align-items: center;
+  justify-content: center; font-size: 16px; flex-shrink: 0;
+}
+.picker-row-meta { flex: 1; min-width: 0; }
+.picker-row-title { font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picker-row-sub { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+.picker-empty { font-size: 14px; color: var(--text3); text-align: center; padding: 2rem 0; }
   display: flex; align-items: center; gap: 8px;
   padding: 9px 0; border-bottom: 0.5px solid var(--border);
   touch-action: none; user-select: none;
@@ -531,7 +547,7 @@ select.finput { appearance: none; }
 <div id="rec-bar">
   <div id="rec-ctx">tap to record</div>
   <div id="rec-row">
-    <button class="rec-bar-btn" id="tag-btn" onclick="openSaveSheet()" aria-label="Tags and notes">
+    <button class="rec-bar-btn" id="tag-btn" onclick="openEditPicker()" aria-label="Edit a song">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
         <line x1="7" y1="7" x2="7.01" y2="7"/>
@@ -630,6 +646,21 @@ select.finput { appearance: none; }
       <input id="newTagInput" class="finput" placeholder="New tag name…" onkeydown="if(event.key==='Enter')addNewTag()" />
       <button onclick="addNewTag()">Add</button>
     </div>
+  </div>
+</div>
+
+<!-- Edit picker sheet -->
+<div class="sheet-overlay" id="editPickerOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit a song
+      <button class="close-btn" onclick="document.getElementById('editPickerOverlay').classList.remove('open')" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="editPickerList"></div>
   </div>
 </div>
 
@@ -1491,6 +1522,30 @@ function openSaveSheet() {
   document.getElementById('saveOverlay').classList.add('open');
 }
 
+function openEditPicker() {
+  const list = document.getElementById('editPickerList');
+  if (!songs.length) {
+    list.innerHTML = '<div class="picker-empty">No songs yet — record something first!</div>';
+  } else {
+    list.innerHTML = songs.map(s => `
+      <div class="picker-row" data-sid="${s.id}">
+        <div class="picker-row-icon">🎵</div>
+        <div class="picker-row-meta">
+          <div class="picker-row-title">${esc(s.title)}</div>
+          <div class="picker-row-sub">${s.tracks.length} track${s.tracks.length!==1?'s':''} · ${[...s.typeTags,...s.audTags].join(', ')||'no tags'}</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text3);flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`).join('');
+    list.querySelectorAll('.picker-row').forEach(row => {
+      row.addEventListener('click', () => {
+        document.getElementById('editPickerOverlay').classList.remove('open');
+        editSong(row.dataset.sid);
+      });
+    });
+  }
+  document.getElementById('editPickerOverlay').classList.add('open');
+}
+
 function openNewSong() {
   editingSongId = null; addingTrackToId = null;
   document.getElementById('sheetHeading').textContent = 'New song';
@@ -1707,12 +1762,13 @@ function closeManage() {
 }
 
 // ── Overlays close on backdrop tap ──
-['saveOverlay','manageOverlay','editTrackOverlay'].forEach(id => {
+['saveOverlay','manageOverlay','editTrackOverlay','editPickerOverlay'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target.id === id) {
       if (id === 'manageOverlay') closeManage();
       else if (id === 'saveOverlay') closeSheet('save');
-      else closeSheet('editTrack');
+      else if (id === 'editTrackOverlay') closeSheet('editTrack');
+      else document.getElementById(id).classList.remove('open');
     }
   });
 });
