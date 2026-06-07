@@ -992,10 +992,23 @@ async function saveMemo() {
   const isVideo = recordingMode === 'video';
   let audioId = null;
   if (audioChunks.length > 0) {
-    const blob = new Blob(audioChunks, { type: audioChunks[0]?.type || (isVideo ? 'video/webm' : 'audio/webm') });
-    audioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
-    await dbPut('audio', { id: audioId, blob, isVideo });
+    const rawBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || (isVideo ? 'video/webm' : 'audio/webm') });
     audioChunks = [];
+    let finalBlob = rawBlob;
+    if (!isVideo) {
+      // Convert to WAV at save time so the native <audio> player gets
+      // correct duration metadata and the scrubber works properly.
+      // WebM from MediaRecorder often has Infinity or missing duration.
+      try {
+        toast('Processing audio…');
+        finalBlob = await webmToWav(rawBlob);
+      } catch(e) {
+        // Fall back to raw if conversion fails
+        finalBlob = rawBlob;
+      }
+    }
+    audioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
+    await dbPut('audio', { id: audioId, blob: finalBlob, isVideo });
   }
 
   const trackTitle = document.getElementById('trackTitle').value.trim() || (isVideo ? 'Video take' : 'New track');
@@ -1103,7 +1116,7 @@ async function shareTrack(songId, trackId) {
     return;
   }
 
-  toast(track.isVideo ? 'Preparing video…' : 'Preparing WAV…');
+  toast(track.isVideo ? 'Preparing video…' : 'Preparing audio…');
   const audioRec = await dbGet('audio', track.audioId);
   if (!audioRec) { toast('Media not found'); return; }
 
@@ -1113,7 +1126,8 @@ async function shareTrack(songId, trackId) {
       shareBlob = audioRec.blob;
       filename = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi, '_') + '.webm';
     } else {
-      shareBlob = await webmToWav(audioRec.blob);
+      // Already stored as WAV — share directly
+      shareBlob = audioRec.blob;
       filename = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi, '_') + '.wav';
     }
     const file = new File([shareBlob], filename, { type: shareBlob.type || 'application/octet-stream' });
@@ -1158,14 +1172,8 @@ async function shareSong(songId) {
     for (const track of tracksWithAudio) {
       const audioRec = await dbGet('audio', track.audioId);
       if (!audioRec) continue;
-      let blob, fname;
-      if (track.isVideo) {
-        blob = audioRec.blob;
-        fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.webm';
-      } else {
-        blob = await webmToWav(audioRec.blob);
-        fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.wav';
-      }
+      let blob = audioRec.blob;
+      const fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + (track.isVideo ? '.webm' : '.wav');
       files.push(new File([blob], fname, { type: blob.type || 'application/octet-stream' }));
     }
 
@@ -1202,14 +1210,8 @@ async function exportAll() {
         if (track.audioId) {
           const audioRec = await dbGet('audio', track.audioId);
           if (audioRec) {
-            let blob, fname;
-            if (track.isVideo) {
-              blob = audioRec.blob;
-              fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.webm';
-            } else {
-              blob = await webmToWav(audioRec.blob);
-              fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + '.wav';
-            }
+            const blob = audioRec.blob;
+            const fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + (track.isVideo ? '.webm' : '.wav');
             files.push(new File([blob], fname, { type: blob.type || 'application/octet-stream' }));
           }
         }
