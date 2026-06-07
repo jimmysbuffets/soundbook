@@ -504,7 +504,7 @@ select.finput { appearance: none; }
   display: none; margin-top: 8px; margin-left: 38px; width: calc(100% - 38px - 4px);
 }
 .track-row.expanded .track-audio { display: block; }
-.track-audio audio { width: 100%; height: 36px; }
+.track-audio audio { width: 100%; min-height: 54px; display: block; }
 
 </style>
 </head>
@@ -1054,13 +1054,17 @@ async function loadTrackPlayer(track) {
   const playerId = track.isVideo ? 'tvplayer-' + track.id : 'taplayer-' + track.id;
   const player = document.getElementById(playerId);
   if (!player) return;
-  // Only load once
-  if (player.src && player.src !== window.location.href && player.src !== '') return;
+  // Only load once — check if we already have a real src set
+  if (player._blobUrl) return;
   const rec = await dbGet('audio', track.audioId);
   if (!rec) { toast('Media not found in storage'); return; }
   const url = URL.createObjectURL(rec.blob);
+  player._blobUrl = url;  // store so we can revoke later and check if loaded
   player.src = url;
-  player.onloadeddata = () => URL.revokeObjectURL(url);
+  // Don't revoke until the element is done — revoke when user navigates away
+  player.onended = () => {
+    // keep src so they can replay; revoke only if row collapses
+  };
 }
 
 async function playTrack(trackId, songId, btn) {
@@ -1352,8 +1356,8 @@ function renderSongs(query = '') {
               ${t.isVideo ? '<span class="vid-badge">video</span>' : ''}
               <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-right:2px">${ti+1}/${s.tracks.length}</span>
             </div>
-            ${t.isVideo && t.audioId ? `<div class="track-video" id="tvid-${t.id}"><video id="tvplayer-${t.id}" controls playsinline preload="none" style="width:100%;max-height:240px;object-fit:contain;display:block;background:#000;border-radius:8px"></video></div>` : ''}
-            ${!t.isVideo && t.audioId ? `<div class="track-audio" id="taud-${t.id}"><audio id="taplayer-${t.id}" controls preload="none" style="width:100%"></audio></div>` : ''}
+            ${t.isVideo && t.audioId ? `<div class="track-video" id="tvid-${t.id}"><video id="tvplayer-${t.id}" controls playsinline preload="metadata" style="width:100%;max-height:240px;object-fit:contain;display:block;background:#000;border-radius:8px"></video></div>` : ''}
+            ${!t.isVideo && t.audioId ? `<div class="track-audio" id="taud-${t.id}"><audio id="taplayer-${t.id}" controls preload="metadata" style="width:100%;min-height:54px;display:block"></audio></div>` : ''}
             <div class="track-note-bub${t.note?'':' empty'}">${t.note ? esc(t.note) : 'No track notes'}</div>
             <div class="track-actions">
               <button class="track-act-btn" data-action="edit-track" data-sid="${s.id}" data-tid="${t.id}">
