@@ -31,6 +31,7 @@ document.getElementById('pwa-manifest').href = URL.createObjectURL(_blob);
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root {
   --bg: #0f0f0f;
@@ -1052,13 +1053,17 @@ async function saveMemo() {
 }
 
 function fmtDate(d) {
-  const now = new Date();
-  const diffMs = now - d;
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffDays === 0) return 'Today ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const day = days[d.getDay()];
+  const date = d.getDate();
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const thisYear = new Date().getFullYear();
+  return thisYear === year
+    ? `${day} ${date} ${month}, ${time}`
+    : `${day} ${date} ${month} ${year}, ${time}`;
 }
 
 // ── Playback ──
@@ -1195,46 +1200,74 @@ async function shareSong(songId) {
 }
 
 async function exportAll() {
-  toast('Preparing full export…');
-  try {
-    let allMeta = '# Soundbook Export\n\n';
-    const files = [];
+  if (!songs.length) { toast('Nothing to export yet'); return; }
 
-    for (const song of songs) {
-      allMeta += `## ${song.title}\n`;
-      allMeta += `Tags: ${[...song.typeTags, ...song.audTags].join(', ')}\n`;
-      allMeta += `Notes: ${song.songNote || '(none)'}\n\n`;
+  const totalTracks = songs.reduce((n, s) => n + s.tracks.filter(t => t.audioId).length, 0);
+  toast(`Building zip — ${totalTracks} track${totalTracks!==1?'s':''}…`);
 
-      for (const track of song.tracks) {
-        allMeta += `  Track: ${track.name} (${track.dur})\n  Notes: ${track.note || 'none'}\n\n`;
-        if (track.audioId) {
-          const audioRec = await dbGet('audio', track.audioId);
-          if (audioRec) {
-            const blob = audioRec.blob;
-            const fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + (track.isVideo ? '.webm' : '.wav');
-            files.push(new File([blob], fname, { type: blob.type || 'application/octet-stream' }));
-          }
-        }
-      }
+  const zip = new JSZip();
+
+  // Notes file at root of zip
+  let allMeta = '# Soundbook Export\n';
+  allMeta += `Exported: ${new Date().toLocaleString()}\n\n`;
+  for (const song of songs) {
+    allMeta += `## ${song.title}\n`;
+    allMeta += `Type: ${song.typeTags.join(', ') || '—'}\n`;
+    allMeta += `For: ${song.audTags.join(', ') || '—'}\n`;
+    allMeta += `Notes: ${song.songNote || '(none)'}\n\n`;
+    for (const track of song.tracks) {
+      allMeta += `  • ${track.name} (${track.dur}) — ${track.date}\n`;
+      if (track.note) allMeta += `    Notes: ${track.note}\n`;
     }
-
-    const notesFile = new File([allMeta], 'soundbook_export.txt', { type: 'text/plain' });
-    files.unshift(notesFile);
-
-    if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
-      await navigator.share({ title: 'Soundbook Export', files });
-    } else {
-      for (const f of files) {
-        const url = URL.createObjectURL(f);
-        const a = document.createElement('a'); a.href = url; a.download = f.name; a.click();
-        await new Promise(r => setTimeout(r, 600));
-        URL.revokeObjectURL(url);
-      }
-      toast('All files downloaded');
-    }
-  } catch(e) {
-    if (e.name !== 'AbortError') toast('Export failed: ' + e.message);
+    allMeta += '\n';
   }
+  zip.file('soundbook_notes.txt', allMeta);
+
+  // Each song gets a folder, each track goes inside it
+  let done = 0;
+  for (const song of songs) {
+    const folderName = song.title.replace(/[^a-z0-9 ]/gi, '_').trim() || 'Untitled';
+    const folder = zip.folder(folderName);
+    for (const track of song.tracks) {
+      if (!track.audioId) continue;
+      const rec = await dbGet('audio', track.audioId);
+      if (!rec) continue;
+      const ext = track.isVideo ? 'webm' : 'wav';
+      const fname = track.name.replace(/[^a-z0-9 ]/gi, '_').trim() + '.' + ext;
+      folder.file(fname, rec.blob);
+      done++;
+      toast(`Adding ${done}/${totalTracks}…`);
+    }
+  }
+
+  toast('Compressing…');
+  const zipBlob = await zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 3 }  // fast, audio/video don't compress much anyway
+  });
+
+  const dateStr = new Date().toISOString().slice(0,10);
+  const zipFile = new File([zipBlob], `soundbook_${dateStr}.zip`, { type: 'application/zip' });
+
+  // Try share sheet first (works great for Drive, email etc on Android)
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [zipFile] })) {
+    try {
+      await navigator.share({ title: 'Soundbook Export', files: [zipFile] });
+      return;
+    } catch(e) {
+      if (e.name === 'AbortError') return; // user cancelled
+      // fall through to download
+    }
+  }
+
+  // Fallback: download to device
+  const url = URL.createObjectURL(zipBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = zipFile.name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  toast('Zip saved to Downloads ✓');
 }
 
 // ── Edit track ──
