@@ -631,9 +631,56 @@ select.finput { appearance: none; }
     </div>
     <div class="stag-grid" id="audTagGrid"></div>
 
-    <div style="display:flex;gap:10px;margin-top:20px">
+    <div id="trim-btn-wrap" style="margin-top:14px;display:none">
+      <button class="save-btn" onclick="openTrimmer()" style="background:transparent;border:1.5px solid var(--acc);color:var(--acc)">
+        ✂ Trim recording
+      </button>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:10px">
       <button class="save-btn" onclick="discardMemo()" style="background:transparent;border:1.5px solid var(--red);color:var(--red);flex:1">Discard</button>
       <button class="save-btn" onclick="saveMemo()" style="flex:2">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Trimmer sheet -->
+<div class="sheet-overlay" id="trimOverlay">
+  <div class="sheet" style="padding-bottom:24px">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" style="margin-bottom:8px">
+      ✂ Trim recording
+      <span style="margin-left:auto;font-size:12px;color:var(--text3);font-family:var(--mono)" id="trim-duration-lbl"></span>
+    </div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:14px">Drag the handles to set start and end points.</p>
+    <div style="position:relative;touch-action:none;user-select:none" id="trimmer-wrap">
+      <canvas id="trim-canvas" style="width:100%;height:90px;border-radius:8px;display:block;background:var(--bg3)"></canvas>
+      <!-- start handle -->
+      <div id="trim-start-handle" style="
+        position:absolute;top:0;bottom:0;width:20px;left:0;
+        display:flex;align-items:center;justify-content:center;
+        cursor:col-resize;z-index:10;touch-action:none">
+        <div style="width:4px;height:70%;background:var(--acc);border-radius:2px;box-shadow:0 0 0 1px var(--bg)"></div>
+      </div>
+      <!-- end handle -->
+      <div id="trim-end-handle" style="
+        position:absolute;top:0;bottom:0;width:20px;right:0;
+        display:flex;align-items:center;justify-content:center;
+        cursor:col-resize;z-index:10;touch-action:none">
+        <div style="width:4px;height:70%;background:var(--acc);border-radius:2px;box-shadow:0 0 0 1px var(--bg)"></div>
+      </div>
+      <!-- shaded out regions -->
+      <div id="trim-shade-left"  style="position:absolute;top:0;bottom:0;left:0;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:8px 0 0 8px"></div>
+      <div id="trim-shade-right" style="position:absolute;top:0;bottom:0;right:0;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:0 8px 8px 0"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text3);font-family:var(--mono)">
+      <span id="trim-start-lbl">0:00</span>
+      <span id="trim-end-lbl">0:00</span>
+    </div>
+    <!-- preview -->
+    <audio id="trim-preview" controls style="width:100%;margin-top:12px;min-height:54px;display:block"></audio>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="save-btn" onclick="cancelTrim()" style="background:transparent;border:1.5px solid var(--border2);color:var(--text2);flex:1">Cancel</button>
+      <button class="save-btn" onclick="applyTrim()" style="flex:2">Apply trim</button>
     </div>
   </div>
 </div>
@@ -984,14 +1031,13 @@ function animateWaveform() {
 
 // ── Save ──
 async function discardMemo() {
-  // Delete the just-recorded blob from IndexedDB if there is one
-  // It was already stored by mediaRecorder.onstop before the sheet opened
-  // so we need to remove it to avoid orphaned data
   audioChunks = [];
+  pendingWavBlob = null;
   recSecs = 0;
   addingTrackToId = null;
   editingSongId = null;
   document.getElementById('saveOverlay').classList.remove('open');
+  document.getElementById('trim-btn-wrap').style.display = 'none';
   document.getElementById('rec-ctx').textContent = 'tap to record';
   toast('Recording discarded');
 }
@@ -1005,24 +1051,10 @@ async function saveMemo() {
 
   const isVideo = recordingMode === 'video';
   let audioId = null;
-  if (audioChunks.length > 0) {
-    const rawBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || (isVideo ? 'video/webm' : 'audio/webm') });
-    audioChunks = [];
-    let finalBlob = rawBlob;
-    if (!isVideo) {
-      // Convert to WAV at save time so the native <audio> player gets
-      // correct duration metadata and the scrubber works properly.
-      // WebM from MediaRecorder often has Infinity or missing duration.
-      try {
-        toast('Processing audio…');
-        finalBlob = await webmToWav(rawBlob);
-      } catch(e) {
-        // Fall back to raw if conversion fails
-        finalBlob = rawBlob;
-      }
-    }
+  if (pendingWavBlob) {
     audioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
-    await dbPut('audio', { id: audioId, blob: finalBlob, isVideo });
+    await dbPut('audio', { id: audioId, blob: pendingWavBlob, isVideo });
+    pendingWavBlob = null;
   }
 
   const trackTitle = document.getElementById('trackTitle').value.trim() || (isVideo ? 'Video take' : 'New track');
@@ -1527,7 +1559,28 @@ document.getElementById('song-list').addEventListener('contextmenu', e => {
 });
 
 // ── Sheet controls ──
-function openSaveSheet() {
+async function openSaveSheet() {
+  // Process audio chunks into WAV now (before sheet opens) so trimmer can use them
+  const isVideo = recordingMode === 'video';
+  if (audioChunks.length > 0) {
+    const rawBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || (isVideo ? 'video/webm' : 'audio/webm') });
+    audioChunks = [];
+    if (!isVideo) {
+      try {
+        toast('Processing audio…');
+        pendingWavBlob = await webmToWav(rawBlob);
+      } catch(e) {
+        pendingWavBlob = rawBlob;
+      }
+    } else {
+      pendingWavBlob = rawBlob;
+    }
+  }
+
+  // Show trim button only for audio recordings
+  document.getElementById('trim-btn-wrap').style.display =
+    (!isVideo && pendingWavBlob) ? 'block' : 'none';
+
   // If we were armed for a specific song (via "Add track"), keep that context.
   // Otherwise reset to a fresh "new song" state.
   if (addingTrackToId) {
@@ -1669,7 +1722,200 @@ function toggleStag(kind, label, el) {
   }
 }
 
-// ── Manage tags ──
+// ── Trimmer ──
+let trimAudioBuffer = null;   // decoded AudioBuffer of current recording
+let trimStartPct = 0;         // 0-1
+let trimEndPct   = 1;         // 0-1
+let pendingWavBlob = null;    // the raw wav blob waiting to be saved/trimmed
+
+function fmtSecs(s) {
+  const m = Math.floor(s / 60);
+  const sec = (s % 60).toFixed(1).padStart(4, '0');
+  return `${m}:${sec}`;
+}
+
+async function openTrimmer() {
+  if (!pendingWavBlob) { toast('No audio to trim'); return; }
+
+  // Decode audio for waveform
+  const arrBuf = await pendingWavBlob.arrayBuffer();
+  const actx = new (window.AudioContext || window.webkitAudioContext)();
+  trimAudioBuffer = await actx.decodeAudioData(arrBuf);
+  actx.close();
+
+  trimStartPct = 0;
+  trimEndPct   = 1;
+
+  document.getElementById('saveOverlay').classList.remove('open');
+  document.getElementById('trimOverlay').classList.add('open');
+
+  // Draw waveform after a tick so canvas has dimensions
+  requestAnimationFrame(() => {
+    drawTrimWaveform();
+    updateTrimHandles();
+    updateTrimPreview();
+  });
+}
+
+function drawTrimWaveform() {
+  const canvas = document.getElementById('trim-canvas');
+  const wrap   = document.getElementById('trimmer-wrap');
+  const W = wrap.clientWidth;
+  const H = 90;
+  canvas.width  = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+
+  if (!trimAudioBuffer) return;
+  const data = trimAudioBuffer.getChannelData(0);
+  const step = Math.ceil(data.length / W);
+  const mid  = H / 2;
+
+  ctx.fillStyle = '#c8f060';
+  for (let x = 0; x < W; x++) {
+    let max = 0;
+    for (let j = 0; j < step; j++) {
+      const v = Math.abs(data[x * step + j] || 0);
+      if (v > max) max = v;
+    }
+    const h = Math.max(2, max * (H - 6));
+    ctx.fillRect(x, mid - h / 2, 1, h);
+  }
+
+  document.getElementById('trim-duration-lbl').textContent =
+    fmtSecs(trimAudioBuffer.duration);
+}
+
+function updateTrimHandles() {
+  const wrap  = document.getElementById('trimmer-wrap');
+  const W     = wrap.clientWidth;
+  const sh    = document.getElementById('trim-start-handle');
+  const eh    = document.getElementById('trim-end-handle');
+  const sl    = document.getElementById('trim-shade-left');
+  const sr    = document.getElementById('trim-shade-right');
+  const dur   = trimAudioBuffer ? trimAudioBuffer.duration : 1;
+
+  const startX = trimStartPct * W;
+  const endX   = trimEndPct   * W;
+
+  sh.style.left  = (startX - 10) + 'px';
+  sh.style.right = 'auto';
+  eh.style.right = ((1 - trimEndPct) * W - 10) + 'px';
+  eh.style.left  = 'auto';
+
+  sl.style.width = startX + 'px';
+  sr.style.width = ((1 - trimEndPct) * W) + 'px';
+
+  document.getElementById('trim-start-lbl').textContent = fmtSecs(trimStartPct * dur);
+  document.getElementById('trim-end-lbl').textContent   = fmtSecs(trimEndPct   * dur);
+}
+
+function updateTrimPreview() {
+  if (!pendingWavBlob || !trimAudioBuffer) return;
+  // Just point preview at the full blob for now — full preview after apply
+  const preview = document.getElementById('trim-preview');
+  if (!preview._blobUrl) {
+    const url = URL.createObjectURL(pendingWavBlob);
+    preview._blobUrl = url;
+    preview.src = url;
+  }
+}
+
+// Drag logic for trim handles
+(function() {
+  function makeDraggable(handleId, isStart) {
+    const el = document.getElementById(handleId);
+    let dragging = false;
+
+    function onMove(clientX) {
+      const wrap = document.getElementById('trimmer-wrap');
+      const rect = wrap.getBoundingClientRect();
+      let pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      if (isStart) {
+        trimStartPct = Math.min(pct, trimEndPct - 0.02);
+      } else {
+        trimEndPct = Math.max(pct, trimStartPct + 0.02);
+      }
+      updateTrimHandles();
+    }
+
+    el.addEventListener('touchstart', e => {
+      dragging = true; e.preventDefault();
+    }, { passive: false });
+    el.addEventListener('touchmove', e => {
+      if (!dragging) return;
+      onMove(e.touches[0].clientX);
+      e.preventDefault();
+    }, { passive: false });
+    el.addEventListener('touchend', () => { dragging = false; });
+
+    // Mouse fallback for desktop testing
+    el.addEventListener('mousedown', e => { dragging = true; e.preventDefault(); });
+    window.addEventListener('mousemove', e => { if (dragging) onMove(e.clientX); });
+    window.addEventListener('mouseup',   () => { dragging = false; });
+  }
+
+  // Init after DOM ready
+  document.addEventListener('DOMContentLoaded', () => {
+    makeDraggable('trim-start-handle', true);
+    makeDraggable('trim-end-handle',   false);
+  });
+})();
+
+async function applyTrim() {
+  if (!trimAudioBuffer || !pendingWavBlob) return;
+  toast('Trimming…');
+
+  const dur        = trimAudioBuffer.duration;
+  const sampleRate = trimAudioBuffer.sampleRate;
+  const numCh      = trimAudioBuffer.numberOfChannels;
+  const startSamp  = Math.floor(trimStartPct * dur * sampleRate);
+  const endSamp    = Math.floor(trimEndPct   * dur * sampleRate);
+  const length     = endSamp - startSamp;
+
+  const actx       = new (window.AudioContext || window.webkitAudioContext)();
+  const trimmed    = actx.createBuffer(numCh, length, sampleRate);
+  for (let ch = 0; ch < numCh; ch++) {
+    trimmed.copyToChannel(
+      trimAudioBuffer.getChannelData(ch).slice(startSamp, endSamp), ch
+    );
+  }
+  actx.close();
+
+  // Re-encode to WAV
+  const wavBuf  = audioBufferToWav(trimmed);
+  pendingWavBlob = new Blob([wavBuf], { type: 'audio/wav' });
+
+  // Update displayed duration
+  const newDur  = length / sampleRate;
+  const m = Math.floor(newDur / 60);
+  const s = Math.round(newDur % 60);
+  recSecs = Math.round(newDur);
+
+  // Clean up preview blob URL
+  const preview = document.getElementById('trim-preview');
+  if (preview._blobUrl) { URL.revokeObjectURL(preview._blobUrl); preview._blobUrl = null; preview.src = ''; }
+  trimAudioBuffer = null;
+
+  document.getElementById('trimOverlay').classList.remove('open');
+  document.getElementById('saveOverlay').classList.add('open');
+  toast('Trimmed ✓ — now save or discard');
+}
+
+function cancelTrim() {
+  const preview = document.getElementById('trim-preview');
+  if (preview._blobUrl) { URL.revokeObjectURL(preview._blobUrl); preview._blobUrl = null; preview.src = ''; }
+  trimAudioBuffer = null;
+  document.getElementById('trimOverlay').classList.remove('open');
+  document.getElementById('saveOverlay').classList.add('open');
+}
+
+
 function openManage(kind) {
   managingKind = kind;
   document.getElementById('manageHeading').textContent = kind === 'type' ? 'Manage type tags' : 'Manage "for" tags';
