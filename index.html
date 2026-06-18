@@ -591,9 +591,6 @@ select.finput { appearance: none; }
     <div class="sheet-title">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
       <span id="sheetHeading">Save recording</span>
-      <button class="close-btn" onclick="closeSheet('save')" aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
     </div>
 
     <div id="destSegWrap">
@@ -634,7 +631,10 @@ select.finput { appearance: none; }
     </div>
     <div class="stag-grid" id="audTagGrid"></div>
 
-    <button class="save-btn" onclick="saveMemo()">Save</button>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="save-btn" onclick="discardMemo()" style="background:transparent;border:1.5px solid var(--red);color:var(--red);flex:1">Discard</button>
+      <button class="save-btn" onclick="saveMemo()" style="flex:2">Save</button>
+    </div>
   </div>
 </div>
 
@@ -983,6 +983,19 @@ function animateWaveform() {
 }
 
 // ── Save ──
+async function discardMemo() {
+  // Delete the just-recorded blob from IndexedDB if there is one
+  // It was already stored by mediaRecorder.onstop before the sheet opened
+  // so we need to remove it to avoid orphaned data
+  audioChunks = [];
+  recSecs = 0;
+  addingTrackToId = null;
+  editingSongId = null;
+  document.getElementById('saveOverlay').classList.remove('open');
+  document.getElementById('rec-ctx').textContent = 'tap to record';
+  toast('Recording discarded');
+}
+
 async function saveMemo() {
   const dur = recSecs > 0
     ? Math.floor(recSecs / 60) + ':' + String(recSecs % 60).padStart(2, '0')
@@ -1783,16 +1796,17 @@ function closeManage() {
 }
 
 // ── Overlays close on backdrop tap ──
-['saveOverlay','manageOverlay','editTrackOverlay','editPickerOverlay'].forEach(id => {
+['manageOverlay','editTrackOverlay','editPickerOverlay'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target.id === id) {
       if (id === 'manageOverlay') closeManage();
-      else if (id === 'saveOverlay') closeSheet('save');
       else if (id === 'editTrackOverlay') closeSheet('editTrack');
       else document.getElementById(id).classList.remove('open');
     }
   });
 });
+// Save overlay: no backdrop dismiss — user must tap Save or Discard
+
 
 // ── Filter pills ──
 document.getElementById('typeFilter').addEventListener('click', e => {
