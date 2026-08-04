@@ -52,12 +52,22 @@ document.getElementById('pwa-manifest').href = URL.createObjectURL(_blob);
   --vid-bg: rgba(61,189,114,0.12);
   --tag-blue: #5B9FE8;
   --tag-blue-bg: rgba(91,159,232,0.12);
-  --type-bg: rgba(139,120,255,0.15);
-  --type-text: #b8a8ff;
-  --type-border: rgba(139,120,255,0.3);
-  --aud-bg: rgba(80,210,160,0.12);
-  --aud-text: #50d2a0;
-  --aud-border: rgba(80,210,160,0.3);
+  /* Project: yellow-green (acc) */
+  --proj-bg: rgba(200,240,96,0.13);
+  --proj-text: #c8f060;
+  --proj-border: rgba(200,240,96,0.3);
+  /* Category: violet */
+  --cat-bg: rgba(139,120,255,0.15);
+  --cat-text: #b8a8ff;
+  --cat-border: rgba(139,120,255,0.3);
+  /* Type: orange */
+  --type-bg: rgba(255,165,60,0.13);
+  --type-text: #ffaa3c;
+  --type-border: rgba(255,165,60,0.3);
+  /* legacy aliases */
+  --aud-bg: var(--proj-bg);
+  --aud-text: var(--proj-text);
+  --aud-border: var(--proj-border);
   --radius: 14px;
   --radius-sm: 8px;
   --sheet-radius: 22px;
@@ -114,9 +124,11 @@ body {
   transition: all 0.15s; user-select: none;
 }
 .pill:active { transform: scale(0.96); }
-.pill.all-on { background: var(--acc); color: var(--acc-text); border-color: var(--acc); }
-.pill.type-on { background: var(--type-bg); color: var(--type-text); border-color: var(--type-border); }
-.pill.aud-on  { background: var(--aud-bg);  color: var(--aud-text);  border-color: var(--aud-border); }
+.pill.all-on  { background: var(--acc);       color: var(--acc-text);  border-color: var(--acc); }
+.pill.proj-on { background: var(--proj-bg);   color: var(--proj-text); border-color: var(--proj-border); }
+.pill.cat-on  { background: var(--cat-bg);    color: var(--cat-text);  border-color: var(--cat-border); }
+.pill.type-on { background: var(--type-bg);   color: var(--type-text); border-color: var(--type-border); }
+.pill.aud-on  { background: var(--proj-bg);   color: var(--proj-text); border-color: var(--proj-border); }
 
 #section-lbl {
   padding: 8px 18px 4px; font-size: 10px; font-weight: 500;
@@ -198,8 +210,9 @@ body {
 .tbadge {
   font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500;
 }
-.tbadge.t { background: var(--type-bg); color: var(--type-text); }
-.tbadge.a { background: var(--aud-bg); color: var(--aud-text); }
+.tbadge.proj { background: var(--proj-bg); color: var(--proj-text); }
+.tbadge.cat  { background: var(--cat-bg);  color: var(--cat-text);  }
+.tbadge.type { background: var(--type-bg); color: var(--type-text); }
 .chev {
   color: var(--text3); font-size: 18px; flex-shrink: 0; margin-top: 2px;
   transition: transform 0.25s; line-height: 1;
@@ -387,8 +400,9 @@ select.finput { appearance: none; }
   font-family: var(--mono); margin-bottom: 8px; margin-top: 16px;
   display: flex; align-items: center; justify-content: space-between;
 }
-.tag-sect-lbl.t { color: var(--type-text); }
-.tag-sect-lbl.a { color: var(--aud-text); }
+.tag-sect-lbl.proj { color: var(--proj-text); }
+.tag-sect-lbl.cat  { color: var(--cat-text);  }
+.tag-sect-lbl.type { color: var(--type-text); }
 .manage-lnk { font-size: 11px; font-weight: 400; text-decoration: underline; cursor: pointer; opacity: 0.7; text-transform: none; letter-spacing: 0; }
 .stag-grid { display: flex; flex-wrap: wrap; gap: 6px; }
 .stag {
@@ -397,8 +411,9 @@ select.finput { appearance: none; }
   color: var(--text2); transition: all 0.12s; user-select: none;
 }
 .stag:active { transform: scale(0.95); }
+.stag.sp { border-color: var(--proj-border); background: var(--proj-bg); color: var(--proj-text); }
+.stag.sc { border-color: var(--cat-border);  background: var(--cat-bg);  color: var(--cat-text);  }
 .stag.st { border-color: var(--type-border); background: var(--type-bg); color: var(--type-text); }
-.stag.sa { border-color: var(--aud-border); background: var(--aud-bg); color: var(--aud-text); }
 
 .save-btn {
   width: 100%; padding: 14px; border-radius: var(--radius-sm);
@@ -530,12 +545,16 @@ select.finput { appearance: none; }
   </div>
 
   <div id="filter-area">
-    <div class="filter-row" id="typeFilter">
-      <span class="filter-lbl">Type</span>
+    <div class="filter-row" id="projFilter">
+      <span class="filter-lbl">Project</span>
       <div class="pill all-on" data-v="all">All</div>
     </div>
-    <div class="filter-row" id="audFilter">
-      <span class="filter-lbl">For</span>
+    <div class="filter-row" id="catFilter">
+      <span class="filter-lbl">Category</span>
+      <div class="pill all-on" data-v="all">All</div>
+    </div>
+    <div class="filter-row" id="typeFilter">
+      <span class="filter-lbl">Type</span>
       <div class="pill all-on" data-v="all">All</div>
     </div>
   </div>
@@ -553,7 +572,7 @@ select.finput { appearance: none; }
 
 <!-- Record bar -->
 <div id="rec-bar">
-  <div id="rec-ctx">tap to record</div>
+  <div id="rec-ctx" style="display:none"></div>
   <div id="rec-row">
     <button class="rec-bar-btn" id="tag-btn" onclick="openEditPicker()" aria-label="Edit a song">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -607,12 +626,12 @@ select.finput { appearance: none; }
       <input id="songTitle" class="finput" placeholder="e.g. Drop D verse idea" />
       <label class="flabel">Song notes</label>
       <input id="songNote" class="finput" placeholder="Key, vibe, structure ideas…" />
-      <div class="tag-sect-lbl a" style="margin-top:12px">
+      <div class="tag-sect-lbl proj" style="margin-top:12px">
         <span>Project</span>
         <span class="manage-lnk" onclick="openManage('project')">manage</span>
       </div>
       <div class="stag-grid" id="projectTagGrid"></div>
-      <div class="tag-sect-lbl t" style="margin-top:10px">
+      <div class="tag-sect-lbl cat" style="margin-top:10px">
         <span>Category</span>
         <span class="manage-lnk" onclick="openManage('category')">manage</span>
       </div>
@@ -625,13 +644,11 @@ select.finput { appearance: none; }
       <select id="songSelect" class="finput"></select>
     </div>
 
-    <!-- Track fields: name, notes, Type tags only -->
+    <!-- Track fields: name and Type tags only -->
     <div id="trackSection">
       <label class="flabel">Track name</label>
       <input id="trackTitle" class="finput" placeholder="e.g. Guitar take 1, rough vocal…" />
-      <label class="flabel">Track notes</label>
-      <input id="trackNote" class="finput" placeholder="Chords, melody idea, needs B part…" />
-      <div class="tag-sect-lbl t" style="margin-top:12px">
+      <div class="tag-sect-lbl type" style="margin-top:12px">
         <span>Type</span>
         <span class="manage-lnk" onclick="openManage('type')">manage</span>
       </div>
@@ -824,9 +841,9 @@ function dbDelete(store, key) {
 // ── State ──
 let projectTags  = ['Blur-Grass','Red Skies','Fine Ground','Other'];
 let categoryTags = ['Composition','Band Song','Practice Idea'];
-let typeTags     = ['A part','B part','C part','Break','Melody','Demo','Intro'];
+let typeTags     = ['Melody','Break','Demo','Rhythm'];
 let songs = [];
-let activeProject = 'all', activeCategory = 'all';
+let activeProject = 'all', activeCategory = 'all', activeType = 'all';
 let editingSongId = null, addingTrackToId = null;
 let selProjectTags = [], selCategoryTags = [], selTypeTags = [];
 let managingKind = null;
@@ -1071,11 +1088,11 @@ async function saveMemo() {
   }
 
   const trackTitle = document.getElementById('trackTitle').value.trim() || (isVideo ? 'Video take' : 'New track');
-  const trackNote = document.getElementById('trackNote').value.trim();
   const newTrack = {
     id: 'tr_' + Date.now(),
     name: trackTitle, dur, date: fmtDate(new Date()),
-    note: trackNote, audioId, isVideo
+    note: '', audioId, isVideo,
+    typeTags: [...selTypeTags]
   };
 
   if (editingSongId) {
@@ -1396,14 +1413,18 @@ function renderAll(query = '') {
 }
 
 function renderFilterPills() {
-  const tf = document.getElementById('typeFilter');
-  const af = document.getElementById('audFilter');
-  tf.innerHTML = `<span class="filter-lbl">Project</span>
-    <div class="pill${activeProject==='all'?' all-on':''}" data-v="all">All</div>
-    ${projectTags.map(t=>`<div class="pill${activeProject===t?' type-on':''}" data-v="${t}">${t}</div>`).join('')}`;
-  af.innerHTML = `<span class="filter-lbl">Category</span>
-    <div class="pill${activeCategory==='all'?' all-on':''}" data-v="all">All</div>
-    ${categoryTags.map(t=>`<div class="pill${activeCategory===t?' aud-on':''}" data-v="${t}">${t}</div>`).join('')}`;
+  document.getElementById('projFilter').innerHTML =
+    `<span class="filter-lbl">Project</span>
+    <div class="pill${activeProject==='all'?' proj-on':''}" data-v="all">All</div>
+    ${projectTags.map(t=>`<div class="pill${activeProject===t?' proj-on':''}" data-v="${t}">${t}</div>`).join('')}`;
+  document.getElementById('catFilter').innerHTML =
+    `<span class="filter-lbl">Category</span>
+    <div class="pill${activeCategory==='all'?' cat-on':''}" data-v="all">All</div>
+    ${categoryTags.map(t=>`<div class="pill${activeCategory===t?' cat-on':''}" data-v="${t}">${t}</div>`).join('')}`;
+  document.getElementById('typeFilter').innerHTML =
+    `<span class="filter-lbl">Type</span>
+    <div class="pill${activeType==='all'?' type-on':''}" data-v="all">All</div>
+    ${typeTags.map(t=>`<div class="pill${activeType===t?' type-on':''}" data-v="${t}">${t}</div>`).join('')}`;
 }
 
 function renderSongs(query = '') {
@@ -1413,10 +1434,11 @@ function renderSongs(query = '') {
   const filtered = songs.filter(s => {
     const projectOk  = activeProject  === 'all' || (s.projectTags||[]).includes(activeProject);
     const categoryOk = activeCategory === 'all' || (s.categoryTags||[]).includes(activeCategory);
+    const typeOk     = activeType     === 'all' || s.tracks.some(t => (t.typeTags||[]).includes(activeType));
     const searchOk = !q || s.title.toLowerCase().includes(q)
       || (s.songNote||'').toLowerCase().includes(q)
       || s.tracks.some(t => t.name.toLowerCase().includes(q) || (t.note||'').toLowerCase().includes(q));
-    return projectOk && categoryOk && searchOk;
+    return projectOk && categoryOk && typeOk && searchOk;
   });
 
   empty.style.display = filtered.length ? 'none' : 'block';
@@ -1432,8 +1454,8 @@ function renderSongs(query = '') {
             ${s.tracks.length ? s.tracks[s.tracks.length-1].date : '—'}
           </div>
           <div class="tag-row">
-            ${(s.projectTags||[]).map(t=>`<span class="tbadge a">${esc(t)}</span>`).join('')}
-            ${(s.categoryTags||[]).map(t=>`<span class="tbadge t">${esc(t)}</span>`).join('')}
+            ${(s.projectTags||[]).map(t=>`<span class="tbadge proj">${esc(t)}</span>`).join('')}
+            ${(s.categoryTags||[]).map(t=>`<span class="tbadge cat">${esc(t)}</span>`).join('')}
           </div>
         </div>
         <div class="chev">›</div>
@@ -1456,15 +1478,15 @@ function renderSongs(query = '') {
                       : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>')}
               </button>
               <div class="track-info">
-                <div class="track-name">${esc(t.name)} <span style="font-size:10px;color:var(--text3);font-family:var(--mono);font-weight:400">${t.note ? '· note' : ''}</span></div>
+                <div class="track-name">${esc(t.name)}</div>
                 <div class="track-meta">${t.date} · ${t.dur} · ${t.isVideo ? 'video' : (t.audioId ? 'audio' : 'no audio')}</div>
+                ${(t.typeTags||[]).length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:3px">${(t.typeTags||[]).map(tt=>`<span class="tbadge type">${esc(tt)}</span>`).join('')}</div>` : ''}
               </div>
               ${t.isVideo ? '<span class="vid-badge">video</span>' : ''}
               <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-right:2px">${ti+1}/${s.tracks.length}</span>
             </div>
             ${t.isVideo && t.audioId ? `<div class="track-video" id="tvid-${t.id}"><video id="tvplayer-${t.id}" controls playsinline preload="metadata" style="width:100%;max-height:240px;object-fit:contain;display:block;background:#000;border-radius:8px"></video></div>` : ''}
             ${!t.isVideo && t.audioId ? `<div class="track-audio" id="taud-${t.id}"><audio id="taplayer-${t.id}" controls preload="metadata" style="width:100%;min-height:54px;display:block"></audio></div>` : ''}
-            <div class="track-note-bub${t.note?'':' empty'}">${t.note ? esc(t.note) : 'No track notes'}</div>
             <div class="track-actions">
               <button class="track-act-btn" data-action="edit-track" data-sid="${s.id}" data-tid="${t.id}">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -1738,9 +1760,9 @@ function rebuildTagGrids() {
   const cg = document.getElementById('categoryTagGrid');
   const tg = document.getElementById('typeTagGrid');
   if (pg) pg.innerHTML = projectTags.map(t =>
-    `<div class="stag${selProjectTags.includes(t)?' sa':''}" onclick="toggleStag('project','${esc(t)}',this)">${esc(t)}</div>`).join('');
+    `<div class="stag${selProjectTags.includes(t)?' sp':''}" onclick="toggleStag('project','${esc(t)}',this)">${esc(t)}</div>`).join('');
   if (cg) cg.innerHTML = categoryTags.map(t =>
-    `<div class="stag${selCategoryTags.includes(t)?' st':''}" onclick="toggleStag('category','${esc(t)}',this)">${esc(t)}</div>`).join('');
+    `<div class="stag${selCategoryTags.includes(t)?' sc':''}" onclick="toggleStag('category','${esc(t)}',this)">${esc(t)}</div>`).join('');
   if (tg) tg.innerHTML = typeTags.map(t =>
     `<div class="stag${selTypeTags.includes(t)?' st':''}" onclick="toggleStag('type','${esc(t)}',this)">${esc(t)}</div>`).join('');
 }
@@ -1748,10 +1770,10 @@ function rebuildTagGrids() {
 function toggleStag(kind, label, el) {
   if (kind === 'project') {
     selProjectTags.includes(label) ? selProjectTags = selProjectTags.filter(x=>x!==label) : selProjectTags.push(label);
-    el.classList.toggle('sa');
+    el.classList.toggle('sp');
   } else if (kind === 'category') {
     selCategoryTags.includes(label) ? selCategoryTags = selCategoryTags.filter(x=>x!==label) : selCategoryTags.push(label);
-    el.classList.toggle('st');
+    el.classList.toggle('sc');
   } else {
     selTypeTags.includes(label) ? selTypeTags = selTypeTags.filter(x=>x!==label) : selTypeTags.push(label);
     el.classList.toggle('st');
@@ -2071,18 +2093,25 @@ function closeManage() {
 
 
 // ── Filter pills ──
-document.getElementById('typeFilter').addEventListener('click', e => {
+document.getElementById('projFilter').addEventListener('click', e => {
   const p = e.target.closest('.pill'); if (!p) return;
-  document.querySelectorAll('#typeFilter .pill').forEach(x => x.classList.remove('all-on','type-on'));
+  document.querySelectorAll('#projFilter .pill').forEach(x => x.classList.remove('proj-on'));
   activeProject = p.dataset.v;
-  p.classList.add(activeProject === 'all' ? 'all-on' : 'type-on');
+  p.classList.add('proj-on');
   renderSongs(document.getElementById('search-input').value);
 });
-document.getElementById('audFilter').addEventListener('click', e => {
+document.getElementById('catFilter').addEventListener('click', e => {
   const p = e.target.closest('.pill'); if (!p) return;
-  document.querySelectorAll('#audFilter .pill').forEach(x => x.classList.remove('all-on','aud-on'));
+  document.querySelectorAll('#catFilter .pill').forEach(x => x.classList.remove('cat-on'));
   activeCategory = p.dataset.v;
-  p.classList.add(activeCategory === 'all' ? 'all-on' : 'aud-on');
+  p.classList.add('cat-on');
+  renderSongs(document.getElementById('search-input').value);
+});
+document.getElementById('typeFilter').addEventListener('click', e => {
+  const p = e.target.closest('.pill'); if (!p) return;
+  document.querySelectorAll('#typeFilter .pill').forEach(x => x.classList.remove('type-on'));
+  activeType = p.dataset.v;
+  p.classList.add('type-on');
   renderSongs(document.getElementById('search-input').value);
 });
 
@@ -2154,7 +2183,7 @@ async function wipeAllData() {
   songs = [];
   projectTags  = ['Blur-Grass','Red Skies','Fine Ground','Other'];
   categoryTags = ['Composition','Band Song','Practice Idea'];
-  typeTags     = ['A part','B part','C part','Break','Melody','Demo','Intro'];
+  typeTags     = ['Melody','Break','Demo','Rhythm'];
   await saveSongs();
   renderAll();
   toast('All data wiped ✓');
