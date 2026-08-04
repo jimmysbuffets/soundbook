@@ -337,7 +337,7 @@ body {
 .sheet {
   background: var(--bg2); border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
   width: 100%; padding: 22px 20px calc(22px + var(--safe-bottom));
-  max-height: 92dvh; overflow-y: auto;
+  max-height: 96dvh; overflow-y: auto;
   border-top: 0.5px solid var(--border2);
 }
 .sheet::-webkit-scrollbar { display: none; }
@@ -519,8 +519,8 @@ select.finput { appearance: none; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
         Export all
       </button>
-      <button class="side-btn" onclick="openNewSong()" aria-label="New song" style="width:36px;height:36px">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+      <button onclick="wipeAllData()" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;background:transparent;border:0.5px solid var(--border);color:var(--text3);font-size:12px;font-family:var(--font);cursor:pointer;">
+        🗑 Wipe
       </button>
     </div>
   </div>
@@ -601,35 +601,42 @@ select.finput { appearance: none; }
       </div>
     </div>
 
+    <!-- New song fields: title, notes, Project + Category tags -->
     <div id="newSongFields">
       <label class="flabel">Song title</label>
       <input id="songTitle" class="finput" placeholder="e.g. Drop D verse idea" />
       <label class="flabel">Song notes</label>
-      <textarea id="songNote" class="finput" placeholder="Overall vibe, key, structure ideas…"></textarea>
+      <input id="songNote" class="finput" placeholder="Key, vibe, structure ideas…" />
+      <div class="tag-sect-lbl a" style="margin-top:12px">
+        <span>Project</span>
+        <span class="manage-lnk" onclick="openManage('project')">manage</span>
+      </div>
+      <div class="stag-grid" id="projectTagGrid"></div>
+      <div class="tag-sect-lbl t" style="margin-top:10px">
+        <span>Category</span>
+        <span class="manage-lnk" onclick="openManage('category')">manage</span>
+      </div>
+      <div class="stag-grid" id="categoryTagGrid"></div>
     </div>
+
+    <!-- Existing song picker -->
     <div id="existSongFields" style="display:none">
       <label class="flabel">Song</label>
       <select id="songSelect" class="finput"></select>
     </div>
 
+    <!-- Track fields: name, notes, Type tags only -->
     <div id="trackSection">
       <label class="flabel">Track name</label>
       <input id="trackTitle" class="finput" placeholder="e.g. Guitar take 1, rough vocal…" />
       <label class="flabel">Track notes</label>
-      <textarea id="trackNote" class="finput" placeholder="Chords, melody idea, needs B part…"></textarea>
+      <input id="trackNote" class="finput" placeholder="Chords, melody idea, needs B part…" />
+      <div class="tag-sect-lbl t" style="margin-top:12px">
+        <span>Type</span>
+        <span class="manage-lnk" onclick="openManage('type')">manage</span>
+      </div>
+      <div class="stag-grid" id="typeTagGrid"></div>
     </div>
-
-    <div class="tag-sect-lbl t">
-      <span>Type</span>
-      <span class="manage-lnk" onclick="openManage('type')">manage tags</span>
-    </div>
-    <div class="stag-grid" id="typeTagGrid"></div>
-
-    <div class="tag-sect-lbl a">
-      <span>For</span>
-      <span class="manage-lnk" onclick="openManage('aud')">manage tags</span>
-    </div>
-    <div class="stag-grid" id="audTagGrid"></div>
 
     <div id="trim-btn-wrap" style="margin-top:14px;display:none">
       <button class="save-btn" onclick="openTrimmer()" style="background:transparent;border:1.5px solid var(--acc);color:var(--acc)">
@@ -815,14 +822,17 @@ function dbDelete(store, key) {
 }
 
 // ── State ──
-let typeTags = ['Composition','Riff','Floaty','Exercise'];
-let audTags  = ['Red Skies','Fine Ground','Duo','Solo','Other'];
+let projectTags  = ['Blur-Grass','Red Skies','Fine Ground','Other'];
+let categoryTags = ['Composition','Band Song','Practice Idea'];
+let typeTags     = ['A part','B part','C part','Break','Melody','Demo','Intro'];
 let songs = [];
-let activeType = 'all', activeAud = 'all';
-let destMode = 'new';
-let editingSongId = null, addingTrackToId = null, editingTrackInfo = null;
-let selTypeTags = [], selAudTags = [];
+let activeProject = 'all', activeCategory = 'all';
+let editingSongId = null, addingTrackToId = null;
+let selProjectTags = [], selCategoryTags = [], selTypeTags = [];
 let managingKind = null;
+let destMode = 'new';
+let editingTrackSongId = null, editingTrackId = null;
+
 
 // ── Audio recording ──
 let mediaRecorder = null, audioChunks = [], recStream = null;
@@ -834,18 +844,21 @@ let currentAudio = null, currentPlayId = null;
 
 // ── Persist ──
 async function saveSongs() {
-  await dbPut('settings', { key: 'songs', value: JSON.stringify(songs) });
-  await dbPut('settings', { key: 'typeTags', value: JSON.stringify(typeTags) });
-  await dbPut('settings', { key: 'audTags', value: JSON.stringify(audTags) });
+  await dbPut('settings', { key: 'songs',        value: JSON.stringify(songs) });
+  await dbPut('settings', { key: 'projectTags',  value: JSON.stringify(projectTags) });
+  await dbPut('settings', { key: 'categoryTags', value: JSON.stringify(categoryTags) });
+  await dbPut('settings', { key: 'typeTags',     value: JSON.stringify(typeTags) });
 }
 
 async function loadData() {
-  const s = await dbGet('settings', 'songs');
+  const s  = await dbGet('settings', 'songs');
+  const pt = await dbGet('settings', 'projectTags');
+  const ct = await dbGet('settings', 'categoryTags');
   const tt = await dbGet('settings', 'typeTags');
-  const at = await dbGet('settings', 'audTags');
-  if (s) songs = JSON.parse(s.value);
-  if (tt) typeTags = JSON.parse(tt.value);
-  if (at) audTags = JSON.parse(at.value);
+  if (s)  songs        = JSON.parse(s.value);
+  if (pt) projectTags  = JSON.parse(pt.value);
+  if (ct) categoryTags = JSON.parse(ct.value);
+  if (tt) typeTags     = JSON.parse(tt.value);
 }
 
 // ── WAV encoding ──
@@ -1070,7 +1083,7 @@ async function saveMemo() {
       ...s,
       title: document.getElementById('songTitle').value.trim() || s.title,
       songNote: document.getElementById('songNote').value.trim(),
-      typeTags: [...selTypeTags], audTags: [...selAudTags]
+      projectTags: [...selProjectTags], categoryTags: [...selCategoryTags]
     } : s);
   } else if (addingTrackToId) {
     songs = songs.map(s => s.id === addingTrackToId
@@ -1084,7 +1097,7 @@ async function saveMemo() {
       id: 'song_' + Date.now(),
       title: document.getElementById('songTitle').value.trim() || 'Untitled song',
       songNote: document.getElementById('songNote').value.trim(),
-      typeTags: [...selTypeTags], audTags: [...selAudTags],
+      projectTags: [...selProjectTags], categoryTags: [...selCategoryTags],
       tracks: [newTrack],
       created: new Date().toISOString()
     };
@@ -1201,7 +1214,7 @@ async function shareSong(songId) {
   const song = songs.find(s => s.id === songId);
   if (!song) return;
 
-  let meta = `🎵 ${song.title}\nTags: ${[...song.typeTags, ...song.audTags].join(', ')}\nNotes: ${song.songNote || '(none)'}\n\nTracks:\n`;
+  let meta = `🎵 ${song.title}\nProject: ${song.projectTags?.join(', ')||'—'}\nCategory: ${song.categoryTags?.join(', ')||'—'}\nNotes: ${song.songNote || '(none)'}\n\nTracks:\n`;
   song.tracks.forEach((t, i) => {
     meta += `  ${i+1}. ${t.name} (${t.dur}) — ${t.note || 'no notes'}\n`;
   });
@@ -1252,13 +1265,13 @@ async function exportAll() {
 
   const zip = new JSZip();
 
-  // Notes file at root of zip
+  // Notes file
   let allMeta = '# Soundbook Export\n';
   allMeta += `Exported: ${new Date().toLocaleString()}\n\n`;
   for (const song of songs) {
     allMeta += `## ${song.title}\n`;
-    allMeta += `Type: ${song.typeTags.join(', ') || '—'}\n`;
-    allMeta += `For: ${song.audTags.join(', ') || '—'}\n`;
+    allMeta += `Project: ${song.projectTags?.join(', ') || '—'}\n`;
+    allMeta += `Category: ${song.categoryTags?.join(', ') || '—'}\n`;
     allMeta += `Notes: ${song.songNote || '(none)'}\n\n`;
     for (const track of song.tracks) {
       allMeta += `  • ${track.name} (${track.dur}) — ${track.date}\n`;
@@ -1268,7 +1281,7 @@ async function exportAll() {
   }
   zip.file('soundbook_notes.txt', allMeta);
 
-  // Each song gets a folder, each track goes inside it
+  // Media files in per-song folders
   let done = 0;
   for (const song of songs) {
     const folderName = song.title.replace(/[^a-z0-9 ]/gi, '_').trim() || 'Untitled';
@@ -1289,34 +1302,47 @@ async function exportAll() {
   const zipBlob = await zip.generateAsync({
     type: 'blob',
     compression: 'DEFLATE',
-    compressionOptions: { level: 3 }  // fast, audio/video don't compress much anyway
+    compressionOptions: { level: 3 }
   });
 
-  const dateStr = new Date().toISOString().slice(0,10);
-  const zipFile = new File([zipBlob], `soundbook_${dateStr}.zip`, { type: 'application/zip' });
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const fileName = `soundbook_${dateStr}.zip`;
 
-  // Try share sheet first (works great for Drive, email etc on Android)
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [zipFile] })) {
+  // Strategy 1: share as file (works on Android Chrome with zip)
+  const zipFile = new File([zipBlob], fileName, { type: 'application/zip' });
+  if (navigator.share) {
     try {
-      await navigator.share({ title: 'Soundbook Export', files: [zipFile] });
-      return;
+      if (navigator.canShare && navigator.canShare({ files: [zipFile] })) {
+        await navigator.share({ title: 'Soundbook Export', files: [zipFile] });
+        return;
+      }
     } catch(e) {
-      if (e.name === 'AbortError') return; // user cancelled
-      // fall through to download
+      if (e.name === 'AbortError') return;
+      // fall through to strategy 2
     }
   }
 
-  // Fallback: download to device
-  const url = URL.createObjectURL(zipBlob);
-  const a = document.createElement('a');
-  a.href = url; a.download = zipFile.name;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 3000);
-  toast('Zip saved to Downloads ✓');
+  // Strategy 2: share as URL pointing to a blob (no file, just a link — works in more contexts)
+  const blobUrl = URL.createObjectURL(zipBlob);
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Soundbook Export', url: blobUrl });
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+      return;
+    } catch(e) {
+      URL.revokeObjectURL(blobUrl);
+      if (e.name === 'AbortError') return;
+      // fall through
+    }
+  }
+
+  // Strategy 3: last resort — open the zip directly so the browser prompts what to do with it
+  window.open(blobUrl, '_blank');
+  toast('Tap to share or save the zip');
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 }
 
 // ── Edit track ──
-let editingTrackSongId = null, editingTrackId = null;
 function openEditTrack(songId, trackId) {
   const song = songs.find(s => s.id === songId);
   const track = song?.tracks.find(t => t.id === trackId);
@@ -1372,12 +1398,12 @@ function renderAll(query = '') {
 function renderFilterPills() {
   const tf = document.getElementById('typeFilter');
   const af = document.getElementById('audFilter');
-  tf.innerHTML = `<span class="filter-lbl">Type</span>
-    <div class="pill${activeType==='all'?' all-on':''}" data-v="all">All</div>
-    ${typeTags.map(t=>`<div class="pill${activeType===t?' type-on':''}" data-v="${t}">${t}</div>`).join('')}`;
-  af.innerHTML = `<span class="filter-lbl">For</span>
-    <div class="pill${activeAud==='all'?' all-on':''}" data-v="all">All</div>
-    ${audTags.map(t=>`<div class="pill${activeAud===t?' aud-on':''}" data-v="${t}">${t}</div>`).join('')}`;
+  tf.innerHTML = `<span class="filter-lbl">Project</span>
+    <div class="pill${activeProject==='all'?' all-on':''}" data-v="all">All</div>
+    ${projectTags.map(t=>`<div class="pill${activeProject===t?' type-on':''}" data-v="${t}">${t}</div>`).join('')}`;
+  af.innerHTML = `<span class="filter-lbl">Category</span>
+    <div class="pill${activeCategory==='all'?' all-on':''}" data-v="all">All</div>
+    ${categoryTags.map(t=>`<div class="pill${activeCategory===t?' aud-on':''}" data-v="${t}">${t}</div>`).join('')}`;
 }
 
 function renderSongs(query = '') {
@@ -1385,12 +1411,12 @@ function renderSongs(query = '') {
   const list = document.getElementById('song-list');
   const empty = document.getElementById('empty');
   const filtered = songs.filter(s => {
-    const typeOk = activeType === 'all' || s.typeTags.includes(activeType);
-    const audOk  = activeAud === 'all'  || s.audTags.includes(activeAud);
+    const projectOk  = activeProject  === 'all' || (s.projectTags||[]).includes(activeProject);
+    const categoryOk = activeCategory === 'all' || (s.categoryTags||[]).includes(activeCategory);
     const searchOk = !q || s.title.toLowerCase().includes(q)
       || (s.songNote||'').toLowerCase().includes(q)
       || s.tracks.some(t => t.name.toLowerCase().includes(q) || (t.note||'').toLowerCase().includes(q));
-    return typeOk && audOk && searchOk;
+    return projectOk && categoryOk && searchOk;
   });
 
   empty.style.display = filtered.length ? 'none' : 'block';
@@ -1406,8 +1432,8 @@ function renderSongs(query = '') {
             ${s.tracks.length ? s.tracks[s.tracks.length-1].date : '—'}
           </div>
           <div class="tag-row">
-            ${s.typeTags.map(t=>`<span class="tbadge t">${esc(t)}</span>`).join('')}
-            ${s.audTags.map(t=>`<span class="tbadge a">${esc(t)}</span>`).join('')}
+            ${(s.projectTags||[]).map(t=>`<span class="tbadge a">${esc(t)}</span>`).join('')}
+            ${(s.categoryTags||[]).map(t=>`<span class="tbadge t">${esc(t)}</span>`).join('')}
           </div>
         </div>
         <div class="chev">›</div>
@@ -1603,7 +1629,7 @@ async function openSaveSheet() {
   document.getElementById('trackSection').style.display = 'block';
   document.getElementById('trackTitle').value = '';
   document.getElementById('trackNote').value = '';
-  selTypeTags = []; selAudTags = [];
+  selProjectTags = []; selCategoryTags = []; selTypeTags = [];
   rebuildTagGrids();
   document.getElementById('rec-ctx').textContent = 'tap to record';
   document.getElementById('saveOverlay').classList.add('open');
@@ -1619,7 +1645,7 @@ function openEditPicker() {
         <div class="picker-row-icon">🎵</div>
         <div class="picker-row-meta">
           <div class="picker-row-title">${esc(s.title)}</div>
-          <div class="picker-row-sub">${s.tracks.length} track${s.tracks.length!==1?'s':''} · ${[...s.typeTags,...s.audTags].join(', ')||'no tags'}</div>
+          <div class="picker-row-sub">${s.tracks.length} track${s.tracks.length!==1?'s':''} · ${[...(s.projectTags||[]),(s.categoryTags||[])].join(', ')||'no tags'}</div>
         </div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text3);flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
       </div>`).join('');
@@ -1639,12 +1665,12 @@ function openNewSong() {
   document.getElementById('destSegWrap').style.display = 'none';
   document.getElementById('newSongFields').style.display = 'block';
   document.getElementById('existSongFields').style.display = 'none';
-  document.getElementById('trackSection').style.display = 'block';
+  document.getElementById('trackSection').style.display = 'none';
   document.getElementById('songTitle').value = '';
   document.getElementById('songNote').value = '';
   document.getElementById('trackTitle').value = '';
   document.getElementById('trackNote').value = '';
-  selTypeTags = []; selAudTags = [];
+  selProjectTags = []; selCategoryTags = []; selTypeTags = [];
   rebuildTagGrids();
   document.getElementById('saveOverlay').classList.add('open');
 }
@@ -1659,7 +1685,9 @@ function editSong(songId) {
   document.getElementById('trackSection').style.display = 'none';
   document.getElementById('songTitle').value = s.title;
   document.getElementById('songNote').value = s.songNote || '';
-  selTypeTags = [...s.typeTags]; selAudTags = [...s.audTags];
+  selProjectTags  = [...(s.projectTags  || [])];
+  selCategoryTags = [...(s.categoryTags || [])];
+  selTypeTags = [];
   rebuildTagGrids();
   document.getElementById('saveOverlay').classList.add('open');
 }
@@ -1706,19 +1734,27 @@ function rebuildSongSelect() {
 }
 
 function rebuildTagGrids() {
-  document.getElementById('typeTagGrid').innerHTML = typeTags.map(t =>
+  const pg = document.getElementById('projectTagGrid');
+  const cg = document.getElementById('categoryTagGrid');
+  const tg = document.getElementById('typeTagGrid');
+  if (pg) pg.innerHTML = projectTags.map(t =>
+    `<div class="stag${selProjectTags.includes(t)?' sa':''}" onclick="toggleStag('project','${esc(t)}',this)">${esc(t)}</div>`).join('');
+  if (cg) cg.innerHTML = categoryTags.map(t =>
+    `<div class="stag${selCategoryTags.includes(t)?' st':''}" onclick="toggleStag('category','${esc(t)}',this)">${esc(t)}</div>`).join('');
+  if (tg) tg.innerHTML = typeTags.map(t =>
     `<div class="stag${selTypeTags.includes(t)?' st':''}" onclick="toggleStag('type','${esc(t)}',this)">${esc(t)}</div>`).join('');
-  document.getElementById('audTagGrid').innerHTML = audTags.map(t =>
-    `<div class="stag${selAudTags.includes(t)?' sa':''}" onclick="toggleStag('aud','${esc(t)}',this)">${esc(t)}</div>`).join('');
 }
 
 function toggleStag(kind, label, el) {
-  if (kind === 'type') {
-    selTypeTags.includes(label) ? selTypeTags = selTypeTags.filter(x=>x!==label) : selTypeTags.push(label);
+  if (kind === 'project') {
+    selProjectTags.includes(label) ? selProjectTags = selProjectTags.filter(x=>x!==label) : selProjectTags.push(label);
+    el.classList.toggle('sa');
+  } else if (kind === 'category') {
+    selCategoryTags.includes(label) ? selCategoryTags = selCategoryTags.filter(x=>x!==label) : selCategoryTags.push(label);
     el.classList.toggle('st');
   } else {
-    selAudTags.includes(label) ? selAudTags = selAudTags.filter(x=>x!==label) : selAudTags.push(label);
-    el.classList.toggle('sa');
+    selTypeTags.includes(label) ? selTypeTags = selTypeTags.filter(x=>x!==label) : selTypeTags.push(label);
+    el.classList.toggle('st');
   }
 }
 
@@ -1918,14 +1954,21 @@ function cancelTrim() {
 
 function openManage(kind) {
   managingKind = kind;
-  document.getElementById('manageHeading').textContent = kind === 'type' ? 'Manage type tags' : 'Manage "for" tags';
+  const labels = { project: 'Project tags', category: 'Category tags', type: 'Type tags' };
+  document.getElementById('manageHeading').textContent = labels[kind] || 'Manage tags';
   document.getElementById('newTagInput').value = '';
   renderManageList();
   document.getElementById('manageOverlay').classList.add('open');
 }
 
+function getTagArray() {
+  if (managingKind === 'project')  return projectTags;
+  if (managingKind === 'category') return categoryTags;
+  return typeTags;
+}
+
 function renderManageList() {
-  const tags = managingKind === 'type' ? typeTags : audTags;
+  const tags = getTagArray();
   const list = document.getElementById('manageList');
   if (!tags.length) {
     list.innerHTML = '<p style="color:var(--text3);font-size:13px;padding:8px 0">No tags yet</p>';
@@ -1943,85 +1986,58 @@ function renderManageList() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
       </button>
     </div>`).join('');
-
-  // delete buttons
   list.querySelectorAll('.mgr-del').forEach(btn => {
     btn.addEventListener('click', () => deleteTag(parseInt(btn.dataset.delidx)));
   });
-
-  // drag-to-reorder via touch
   initTagDrag(list);
 }
 
 function initTagDrag(list) {
   let dragRow = null, dragIdx = -1, startY = 0, currentY = 0;
   let rowHeight = 0, rows = [];
-
   list.addEventListener('pointerdown', e => {
     const handle = e.target.closest('.mgr-handle');
     if (!handle) return;
     dragRow = handle.closest('.mgr-row');
     if (!dragRow) return;
-
     rows = Array.from(list.querySelectorAll('.mgr-row'));
     dragIdx = rows.indexOf(dragRow);
     rowHeight = dragRow.offsetHeight;
-    startY = e.clientY;
-    currentY = startY;
-
+    startY = e.clientY; currentY = startY;
     dragRow.classList.add('dragging');
     dragRow.setPointerCapture(e.pointerId);
     e.preventDefault();
   }, { passive: false });
-
   list.addEventListener('pointermove', e => {
     if (!dragRow) return;
     currentY = e.clientY;
     const dy = currentY - startY;
-
-    // visual ghost shift
     dragRow.style.transform = `translateY(${dy}px)`;
-
-    // figure out which slot we're hovering over
-    const newIdx = Math.max(0, Math.min(rows.length - 1,
-      dragIdx + Math.round(dy / rowHeight)
-    ));
-
-    rows.forEach((r, i) => {
-      r.classList.remove('drag-over');
-      if (i === newIdx && r !== dragRow) r.classList.add('drag-over');
-    });
+    const newIdx = Math.max(0, Math.min(rows.length - 1, dragIdx + Math.round(dy / rowHeight)));
+    rows.forEach((r, i) => { r.classList.remove('drag-over'); if (i === newIdx && r !== dragRow) r.classList.add('drag-over'); });
   });
-
   const endDrag = async () => {
     if (!dragRow) return;
     const dy = currentY - startY;
-    const newIdx = Math.max(0, Math.min(rows.length - 1,
-      dragIdx + Math.round(dy / rowHeight)
-    ));
-
+    const newIdx = Math.max(0, Math.min(rows.length - 1, dragIdx + Math.round(dy / rowHeight)));
     dragRow.style.transform = '';
     dragRow.classList.remove('dragging');
     rows.forEach(r => r.classList.remove('drag-over'));
-
     if (newIdx !== dragIdx) {
-      const arr = managingKind === 'type' ? typeTags : audTags;
+      const arr = getTagArray();
       const [moved] = arr.splice(dragIdx, 1);
       arr.splice(newIdx, 0, moved);
       await saveSongs();
-      renderManageList();
-      renderAll();
+      renderManageList(); renderAll();
     }
     dragRow = null;
   };
-
   list.addEventListener('pointerup', endDrag);
   list.addEventListener('pointercancel', endDrag);
 }
 
 async function deleteTag(idx) {
-  if (managingKind === 'type') typeTags.splice(idx, 1);
-  else audTags.splice(idx, 1);
+  getTagArray().splice(idx, 1);
   await saveSongs();
   renderManageList(); renderAll();
 }
@@ -2029,8 +2045,8 @@ async function deleteTag(idx) {
 async function addNewTag() {
   const val = document.getElementById('newTagInput').value.trim();
   if (!val) return;
-  if (managingKind === 'type') { if (!typeTags.includes(val)) typeTags.push(val); }
-  else { if (!audTags.includes(val)) audTags.push(val); }
+  const arr = getTagArray();
+  if (!arr.includes(val)) arr.push(val);
   document.getElementById('newTagInput').value = '';
   await saveSongs();
   renderManageList(); renderAll(); rebuildTagGrids();
@@ -2058,15 +2074,15 @@ function closeManage() {
 document.getElementById('typeFilter').addEventListener('click', e => {
   const p = e.target.closest('.pill'); if (!p) return;
   document.querySelectorAll('#typeFilter .pill').forEach(x => x.classList.remove('all-on','type-on'));
-  activeType = p.dataset.v;
-  p.classList.add(activeType === 'all' ? 'all-on' : 'type-on');
+  activeProject = p.dataset.v;
+  p.classList.add(activeProject === 'all' ? 'all-on' : 'type-on');
   renderSongs(document.getElementById('search-input').value);
 });
 document.getElementById('audFilter').addEventListener('click', e => {
   const p = e.target.closest('.pill'); if (!p) return;
   document.querySelectorAll('#audFilter .pill').forEach(x => x.classList.remove('all-on','aud-on'));
-  activeAud = p.dataset.v;
-  p.classList.add(activeAud === 'all' ? 'all-on' : 'aud-on');
+  activeCategory = p.dataset.v;
+  p.classList.add(activeCategory === 'all' ? 'all-on' : 'aud-on');
   renderSongs(document.getElementById('search-input').value);
 });
 
@@ -2129,7 +2145,22 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// ── Service Worker (PWA installability) ──
+async function wipeAllData() {
+  if (!confirm('Delete ALL songs, tracks, and recordings? This cannot be undone.\n\nMake sure you have exported first.')) return;
+  // Delete all audio blobs
+  const allAudio = await dbGetAll('audio');
+  for (const a of allAudio) await dbDelete('audio', a.id);
+  // Reset songs and settings
+  songs = [];
+  projectTags  = ['Blur-Grass','Red Skies','Fine Ground','Other'];
+  categoryTags = ['Composition','Band Song','Practice Idea'];
+  typeTags     = ['A part','B part','C part','Break','Melody','Demo','Intro'];
+  await saveSongs();
+  renderAll();
+  toast('All data wiped ✓');
+}
+
+
 if ('serviceWorker' in navigator) {
   const swCode = `
     self.addEventListener('install', e => self.skipWaiting());
