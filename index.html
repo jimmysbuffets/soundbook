@@ -920,8 +920,16 @@ function audioBufferToWav(buffer) {
 
 async function webmToWav(webmBlob) {
   const arrayBuffer = await webmBlob.arrayBuffer();
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+  // AudioContext may be suspended on mobile until user gesture — resume it
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+  let decoded;
+  try {
+    decoded = await audioCtx.decodeAudioData(arrayBuffer);
+  } catch(e) {
+    audioCtx.close();
+    throw new Error('decodeAudioData failed: ' + e.message);
+  }
   const wavBuffer = audioBufferToWav(decoded);
   audioCtx.close();
   return new Blob([wavBuffer], { type: 'audio/wav' });
@@ -962,7 +970,14 @@ async function toggleRecord(mode) {
       ? `ready for: ${songs.find(s=>s.id===addingTrackToId)?.title || ''}`
       : 'tap to record';
 
-    mediaRecorder.onstop = () => openSaveSheet();
+    mediaRecorder.onstop = () => {
+      openSaveSheet().catch(err => {
+        console.error('openSaveSheet error:', err);
+        toast('Error: ' + err.message);
+        // Force sheet open even if processing failed
+        document.getElementById('saveOverlay').classList.add('open');
+      });
+    };
     recording = false;
     return;
   }
@@ -1608,17 +1623,20 @@ document.getElementById('song-list').addEventListener('contextmenu', e => {
 
 // ── Sheet controls ──
 async function openSaveSheet() {
-  // Process audio chunks into WAV now (before sheet opens) so trimmer can use them
   const isVideo = recordingMode === 'video';
   if (audioChunks.length > 0) {
     const rawBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || (isVideo ? 'video/webm' : 'audio/webm') });
     audioChunks = [];
     if (!isVideo) {
+      toast('Processing audio…');
       try {
-        toast('Processing audio…');
         pendingWavBlob = await webmToWav(rawBlob);
+        toast('');
       } catch(e) {
+        console.error('WAV conversion failed:', e);
+        // Fall back to raw blob — scrubber may not work but recording is saved
         pendingWavBlob = rawBlob;
+        toast('Saved as-is (conversion failed)');
       }
     } else {
       pendingWavBlob = rawBlob;
