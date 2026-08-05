@@ -671,37 +671,43 @@ select.finput { appearance: none; }
 <div class="sheet-overlay" id="trimOverlay">
   <div class="sheet" style="padding-bottom:24px">
     <div class="sheet-handle"></div>
-    <div class="sheet-title" style="margin-bottom:8px">
+    <div class="sheet-title" style="margin-bottom:4px">
       ✂ Trim recording
       <span style="margin-left:auto;font-size:12px;color:var(--text3);font-family:var(--mono)" id="trim-duration-lbl"></span>
     </div>
-    <p style="font-size:12px;color:var(--text3);margin-bottom:14px">Drag the handles to set start and end points.</p>
-    <div style="position:relative;touch-action:none;user-select:none" id="trimmer-wrap">
-      <canvas id="trim-canvas" style="width:100%;height:90px;border-radius:8px;display:block;background:var(--bg3)"></canvas>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:10px">Drag green handles to set trim points. Tap waveform to seek. Tap ▶ to preview.</p>
+
+    <!-- Unified waveform + trim + playhead -->
+    <div style="position:relative;touch-action:none;user-select:none;border-radius:10px;overflow:hidden;background:var(--bg3)" id="trimmer-wrap">
+      <canvas id="trim-canvas" style="width:100%;height:110px;display:block"></canvas>
+      <!-- playhead line -->
+      <div id="trim-playhead" style="position:absolute;top:0;bottom:0;width:2px;background:white;opacity:0.8;pointer-events:none;left:0;display:none"></div>
+      <!-- shade out regions -->
+      <div id="trim-shade-left"  style="position:absolute;top:0;bottom:0;left:0;width:0;background:rgba(0,0,0,0.6);pointer-events:none"></div>
+      <div id="trim-shade-right" style="position:absolute;top:0;bottom:0;right:0;width:0;background:rgba(0,0,0,0.6);pointer-events:none"></div>
       <!-- start handle -->
-      <div id="trim-start-handle" style="
-        position:absolute;top:0;bottom:0;width:20px;left:0;
-        display:flex;align-items:center;justify-content:center;
-        cursor:col-resize;z-index:10;touch-action:none">
-        <div style="width:4px;height:70%;background:var(--acc);border-radius:2px;box-shadow:0 0 0 1px var(--bg)"></div>
+      <div id="trim-start-handle" style="position:absolute;top:0;bottom:0;width:28px;left:0;display:flex;align-items:center;justify-content:center;cursor:col-resize;z-index:10;touch-action:none">
+        <div style="width:4px;height:80%;background:var(--acc);border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,0.5)"></div>
       </div>
       <!-- end handle -->
-      <div id="trim-end-handle" style="
-        position:absolute;top:0;bottom:0;width:20px;right:0;
-        display:flex;align-items:center;justify-content:center;
-        cursor:col-resize;z-index:10;touch-action:none">
-        <div style="width:4px;height:70%;background:var(--acc);border-radius:2px;box-shadow:0 0 0 1px var(--bg)"></div>
+      <div id="trim-end-handle" style="position:absolute;top:0;bottom:0;width:28px;right:0;display:flex;align-items:center;justify-content:center;cursor:col-resize;z-index:10;touch-action:none">
+        <div style="width:4px;height:80%;background:var(--acc);border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,0.5)"></div>
       </div>
-      <!-- shaded out regions -->
-      <div id="trim-shade-left"  style="position:absolute;top:0;bottom:0;left:0;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:8px 0 0 8px"></div>
-      <div id="trim-shade-right" style="position:absolute;top:0;bottom:0;right:0;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:0 8px 8px 0"></div>
     </div>
-    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text3);font-family:var(--mono)">
-      <span id="trim-start-lbl">0:00</span>
-      <span id="trim-end-lbl">0:00</span>
+
+    <!-- time labels + play/stop button -->
+    <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+      <span id="trim-start-lbl" style="font-size:11px;color:var(--acc);font-family:var(--mono);min-width:38px">0:00.0</span>
+      <button id="trim-play-btn" onclick="toggleTrimPlay()" style="
+        flex-shrink:0;width:36px;height:36px;border-radius:50%;
+        background:var(--bg3);border:0.5px solid var(--border2);
+        color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <svg id="trim-play-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </button>
+      <span id="trim-current-lbl" style="font-size:11px;color:var(--text3);font-family:var(--mono);flex:1;text-align:center">0:00.0</span>
+      <span id="trim-end-lbl" style="font-size:11px;color:var(--acc);font-family:var(--mono);min-width:38px;text-align:right">0:00.0</span>
     </div>
-    <!-- preview -->
-    <audio id="trim-preview" controls style="width:100%;margin-top:12px;min-height:54px;display:block"></audio>
+
     <div style="display:flex;gap:10px;margin-top:14px">
       <button class="save-btn" onclick="cancelTrim()" style="background:transparent;border:1.5px solid var(--border2);color:var(--text2);flex:1">Cancel</button>
       <button class="save-btn" onclick="applyTrim()" style="flex:2">Apply trim</button>
@@ -1162,17 +1168,45 @@ async function loadTrackPlayer(track) {
   const playerId = track.isVideo ? 'tvplayer-' + track.id : 'taplayer-' + track.id;
   const player = document.getElementById(playerId);
   if (!player) return;
-  // Only load once — check if we already have a real src set
-  if (player._blobUrl) return;
+  if (player._blobUrl) return;  // already loaded
+
   const rec = await dbGet('audio', track.audioId);
   if (!rec) { toast('Media not found in storage'); return; }
-  const url = URL.createObjectURL(rec.blob);
-  player._blobUrl = url;  // store so we can revoke later and check if loaded
-  player.src = url;
-  // Don't revoke until the element is done — revoke when user navigates away
-  player.onended = () => {
-    // keep src so they can replay; revoke only if row collapses
-  };
+
+  if (track.isVideo) {
+    // For video WebM, Chrome on Android can't scrub unless the full file
+    // is buffered. We read the entire blob into an ArrayBuffer and re-wrap
+    // it, which forces the browser to treat it as a fully-available resource.
+    try {
+      const arrayBuf = await rec.blob.arrayBuffer();
+      const reBlob = new Blob([arrayBuf], { type: rec.blob.type || 'video/webm' });
+      const url = URL.createObjectURL(reBlob);
+      player._blobUrl = url;
+      player.src = url;
+      player.preload = 'auto';
+      // After metadata loads, seek to 0 to force duration calculation
+      player.onloadedmetadata = () => {
+        if (!isFinite(player.duration)) {
+          // Duration still unknown — seek to end to force Chrome to calculate it
+          player.currentTime = 1e9;
+          player.ontimeupdate = () => {
+            player.ontimeupdate = null;
+            player.currentTime = 0;
+          };
+        }
+      };
+    } catch(e) {
+      // Fallback to direct blob URL
+      const url = URL.createObjectURL(rec.blob);
+      player._blobUrl = url;
+      player.src = url;
+    }
+  } else {
+    // Audio is already WAV with correct duration — load directly
+    const url = URL.createObjectURL(rec.blob);
+    player._blobUrl = url;
+    player.src = url;
+  }
 }
 
 async function playTrack(trackId, songId, btn) {
@@ -1670,9 +1704,9 @@ async function openSaveSheet() {
   document.getElementById('trackTitle').value = '';
   document.getElementById('trackNote').value = '';
   selProjectTags = []; selCategoryTags = []; selTypeTags = [];
-  rebuildTagGrids();
-  document.getElementById('rec-ctx').textContent = 'tap to record';
   document.getElementById('saveOverlay').classList.add('open');
+  // Rebuild grids after sheet is visible so elements are in the painted DOM
+  requestAnimationFrame(() => rebuildTagGrids());
 }
 
 function openEditPicker() {
@@ -1711,8 +1745,8 @@ function openNewSong() {
   document.getElementById('trackTitle').value = '';
   document.getElementById('trackNote').value = '';
   selProjectTags = []; selCategoryTags = []; selTypeTags = [];
-  rebuildTagGrids();
   document.getElementById('saveOverlay').classList.add('open');
+  requestAnimationFrame(() => rebuildTagGrids());
 }
 
 function editSong(songId) {
@@ -1728,8 +1762,8 @@ function editSong(songId) {
   selProjectTags  = [...(s.projectTags  || [])];
   selCategoryTags = [...(s.categoryTags || [])];
   selTypeTags = [];
-  rebuildTagGrids();
   document.getElementById('saveOverlay').classList.add('open');
+  requestAnimationFrame(() => rebuildTagGrids());
 }
 
 function startAddTrack(songId) {
@@ -1799,10 +1833,13 @@ function toggleStag(kind, label, el) {
 }
 
 // ── Trimmer ──
-let trimAudioBuffer = null;   // decoded AudioBuffer of current recording
-let trimStartPct = 0;         // 0-1
-let trimEndPct   = 1;         // 0-1
-let pendingWavBlob = null;    // the raw wav blob waiting to be saved/trimmed
+let trimAudioBuffer = null;
+let trimStartPct = 0;
+let trimEndPct   = 1;
+let pendingWavBlob = null;
+let trimAudioSrc = null;
+let trimPlayer   = null;
+let trimPlayAnim = null;
 
 function fmtSecs(s) {
   const m = Math.floor(s / 60);
@@ -1812,185 +1849,188 @@ function fmtSecs(s) {
 
 async function openTrimmer() {
   if (!pendingWavBlob) { toast('No audio to trim'); return; }
-
-  // Decode audio for waveform
-  const arrBuf = await pendingWavBlob.arrayBuffer();
-  const actx = new (window.AudioContext || window.webkitAudioContext)();
-  trimAudioBuffer = await actx.decodeAudioData(arrBuf);
-  actx.close();
-
-  trimStartPct = 0;
-  trimEndPct   = 1;
-
+  toast('Loading waveform\u2026');
+  try {
+    const arrBuf = await pendingWavBlob.arrayBuffer();
+    const actx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+    if (actx.state === 'suspended') await actx.resume();
+    trimAudioBuffer = await actx.decodeAudioData(arrBuf);
+    actx.close();
+  } catch(e) {
+    toast('Could not load waveform: ' + e.message); return;
+  }
+  stopTrimPlay();
+  if (trimAudioSrc) { URL.revokeObjectURL(trimAudioSrc); trimAudioSrc = null; }
+  trimAudioSrc = URL.createObjectURL(pendingWavBlob);
+  trimStartPct = 0; trimEndPct = 1;
   document.getElementById('saveOverlay').classList.remove('open');
   document.getElementById('trimOverlay').classList.add('open');
-
-  // Draw waveform after a tick so canvas has dimensions
-  requestAnimationFrame(() => {
-    drawTrimWaveform();
-    updateTrimHandles();
-    updateTrimPreview();
-  });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    drawTrimWaveform(); updateTrimHandles(); initTrimInteraction();
+  }));
 }
 
 function drawTrimWaveform() {
   const canvas = document.getElementById('trim-canvas');
   const wrap   = document.getElementById('trimmer-wrap');
-  const W = wrap.clientWidth;
-  const H = 90;
-  canvas.width  = W * devicePixelRatio;
-  canvas.height = H * devicePixelRatio;
-  canvas.style.width  = W + 'px';
-  canvas.style.height = H + 'px';
-
+  if (!canvas || !wrap) return;
+  const W = wrap.clientWidth || 300;
+  const H = 110;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   const ctx = canvas.getContext('2d');
-  ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
-
   if (!trimAudioBuffer) return;
   const data = trimAudioBuffer.getChannelData(0);
-  const step = Math.ceil(data.length / W);
-  const mid  = H / 2;
-
-  ctx.fillStyle = '#c8f060';
+  const step = Math.max(1, Math.ceil(data.length / W));
+  const mid = H / 2;
   for (let x = 0; x < W; x++) {
     let max = 0;
-    for (let j = 0; j < step; j++) {
-      const v = Math.abs(data[x * step + j] || 0);
-      if (v > max) max = v;
-    }
-    const h = Math.max(2, max * (H - 6));
+    for (let j = 0; j < step; j++) { const v = Math.abs(data[x * step + j] || 0); if (v > max) max = v; }
+    const h = Math.max(2, max * (H - 8));
+    const pct = x / W;
+    ctx.fillStyle = (pct >= trimStartPct && pct <= trimEndPct) ? '#c8f060' : '#3a4a1a';
     ctx.fillRect(x, mid - h / 2, 1, h);
   }
-
-  document.getElementById('trim-duration-lbl').textContent =
-    fmtSecs(trimAudioBuffer.duration);
+  const durLbl = document.getElementById('trim-duration-lbl');
+  if (durLbl) durLbl.textContent = fmtSecs(trimAudioBuffer.duration);
 }
 
 function updateTrimHandles() {
-  const wrap  = document.getElementById('trimmer-wrap');
-  const W     = wrap.clientWidth;
-  const sh    = document.getElementById('trim-start-handle');
-  const eh    = document.getElementById('trim-end-handle');
-  const sl    = document.getElementById('trim-shade-left');
-  const sr    = document.getElementById('trim-shade-right');
-  const dur   = trimAudioBuffer ? trimAudioBuffer.duration : 1;
-
-  const startX = trimStartPct * W;
-  const endX   = trimEndPct   * W;
-
-  sh.style.left  = (startX - 10) + 'px';
-  sh.style.right = 'auto';
-  eh.style.right = ((1 - trimEndPct) * W - 10) + 'px';
-  eh.style.left  = 'auto';
-
-  sl.style.width = startX + 'px';
+  const wrap = document.getElementById('trimmer-wrap');
+  const sh = document.getElementById('trim-start-handle');
+  const eh = document.getElementById('trim-end-handle');
+  const sl = document.getElementById('trim-shade-left');
+  const sr = document.getElementById('trim-shade-right');
+  if (!wrap || !sh || !eh || !sl || !sr) return;
+  const W = wrap.clientWidth || 300;
+  const dur = trimAudioBuffer ? trimAudioBuffer.duration : 1;
+  sh.style.left = (trimStartPct * W - 14) + 'px'; sh.style.right = 'auto';
+  eh.style.right = ((1 - trimEndPct) * W - 14) + 'px'; eh.style.left = 'auto';
+  sl.style.width = (trimStartPct * W) + 'px';
   sr.style.width = ((1 - trimEndPct) * W) + 'px';
-
-  document.getElementById('trim-start-lbl').textContent = fmtSecs(trimStartPct * dur);
-  document.getElementById('trim-end-lbl').textContent   = fmtSecs(trimEndPct   * dur);
+  const s1 = document.getElementById('trim-start-lbl');
+  const e1 = document.getElementById('trim-end-lbl');
+  if (s1) s1.textContent = fmtSecs(trimStartPct * dur);
+  if (e1) e1.textContent = fmtSecs(trimEndPct * dur);
+  drawTrimWaveform();
 }
 
-function updateTrimPreview() {
-  if (!pendingWavBlob || !trimAudioBuffer) return;
-  // Just point preview at the full blob for now — full preview after apply
-  const preview = document.getElementById('trim-preview');
-  if (!preview._blobUrl) {
-    const url = URL.createObjectURL(pendingWavBlob);
-    preview._blobUrl = url;
-    preview.src = url;
-  }
+function updatePlayhead(pct) {
+  const wrap = document.getElementById('trimmer-wrap');
+  const ph = document.getElementById('trim-playhead');
+  const cl = document.getElementById('trim-current-lbl');
+  if (!wrap || !ph) return;
+  const W = wrap.clientWidth || 300;
+  ph.style.left = (pct * W) + 'px'; ph.style.display = 'block';
+  if (cl && trimAudioBuffer) cl.textContent = fmtSecs(pct * trimAudioBuffer.duration);
 }
 
-// Drag logic for trim handles
-(function() {
-  function makeDraggable(handleId, isStart) {
-    const el = document.getElementById(handleId);
-    let dragging = false;
-
-    function onMove(clientX) {
-      const wrap = document.getElementById('trimmer-wrap');
-      const rect = wrap.getBoundingClientRect();
-      let pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      if (isStart) {
-        trimStartPct = Math.min(pct, trimEndPct - 0.02);
-      } else {
-        trimEndPct = Math.max(pct, trimStartPct + 0.02);
-      }
-      updateTrimHandles();
-    }
-
-    el.addEventListener('touchstart', e => {
-      dragging = true; e.preventDefault();
-    }, { passive: false });
-    el.addEventListener('touchmove', e => {
-      if (!dragging) return;
-      onMove(e.touches[0].clientX);
-      e.preventDefault();
-    }, { passive: false });
-    el.addEventListener('touchend', () => { dragging = false; });
-
-    // Mouse fallback for desktop testing
-    el.addEventListener('mousedown', e => { dragging = true; e.preventDefault(); });
-    window.addEventListener('mousemove', e => { if (dragging) onMove(e.clientX); });
-    window.addEventListener('mouseup',   () => { dragging = false; });
+function toggleTrimPlay() {
+  if (trimPlayer && !trimPlayer.paused) { stopTrimPlay(); return; }
+  if (!trimAudioSrc || !trimAudioBuffer) return;
+  const dur = trimAudioBuffer.duration;
+  const ph = document.getElementById('trim-playhead');
+  const wrap = document.getElementById('trimmer-wrap');
+  let startPct = trimStartPct;
+  if (ph && ph.style.display !== 'none' && wrap) {
+    const currentLeft = parseFloat(ph.style.left) || 0;
+    const p = currentLeft / (wrap.clientWidth || 300);
+    if (p >= trimStartPct && p < trimEndPct) startPct = p;
   }
+  trimPlayer = new Audio(trimAudioSrc);
+  trimPlayer.currentTime = startPct * dur;
+  const endTime = trimEndPct * dur;
+  trimPlayer.ontimeupdate = () => {
+    if (trimPlayer.currentTime >= endTime) { stopTrimPlay(); return; }
+    updatePlayhead(trimPlayer.currentTime / dur);
+  };
+  trimPlayer.onended = () => stopTrimPlay();
+  trimPlayer.play();
+  const icon = document.getElementById('trim-play-icon');
+  if (icon) icon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+}
 
-  // Init after DOM ready
-  document.addEventListener('DOMContentLoaded', () => {
-    makeDraggable('trim-start-handle', true);
-    makeDraggable('trim-end-handle',   false);
+function stopTrimPlay() {
+  if (trimPlayer) { trimPlayer.pause(); trimPlayer = null; }
+  cancelAnimationFrame(trimPlayAnim);
+  const icon = document.getElementById('trim-play-icon');
+  if (icon) icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+}
+
+function initTrimInteraction() {
+  ['trim-start-handle','trim-end-handle','trimmer-wrap'].forEach(id => {
+    const old = document.getElementById(id);
+    if (!old) return;
+    const fresh = old.cloneNode(true);
+    old.parentNode.replaceChild(fresh, old);
   });
-})();
+  const wrap = document.getElementById('trimmer-wrap');
+  if (!wrap) return;
+  let dragMode = null;
+  function getWrapPct(clientX) {
+    const rect = wrap.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  }
+  function handleMove(clientX) {
+    const pct = getWrapPct(clientX);
+    if (dragMode === 'start') { trimStartPct = Math.min(pct, trimEndPct - 0.02); updateTrimHandles(); }
+    else if (dragMode === 'end') { trimEndPct = Math.max(pct, trimStartPct + 0.02); updateTrimHandles(); }
+    else if (dragMode === 'seek') { updatePlayhead(pct); }
+  }
+  function startDrag(clientX) {
+    const pct = getWrapPct(clientX);
+    const W = wrap.clientWidth || 300;
+    const touchX = clientX - wrap.getBoundingClientRect().left;
+    if (Math.abs(touchX - trimStartPct * W) < 32) dragMode = 'start';
+    else if (Math.abs(touchX - trimEndPct * W) < 32) dragMode = 'end';
+    else { dragMode = 'seek'; stopTrimPlay(); updatePlayhead(pct); }
+  }
+  wrap.addEventListener('touchstart', e => { startDrag(e.touches[0].clientX); e.preventDefault(); }, { passive: false });
+  wrap.addEventListener('touchmove',  e => { handleMove(e.touches[0].clientX); e.preventDefault(); }, { passive: false });
+  wrap.addEventListener('touchend',   () => { dragMode = null; });
+  wrap.addEventListener('mousedown',  e => { startDrag(e.clientX); e.preventDefault(); });
+  window.addEventListener('mousemove', e => { if (dragMode) handleMove(e.clientX); });
+  window.addEventListener('mouseup',   () => { dragMode = null; });
+  // Re-wire play button
+  const playBtn = document.getElementById('trim-play-btn');
+  if (playBtn) { const fresh = playBtn.cloneNode(true); playBtn.parentNode.replaceChild(fresh, playBtn); document.getElementById('trim-play-btn').addEventListener('click', toggleTrimPlay); }
+}
 
 async function applyTrim() {
   if (!trimAudioBuffer || !pendingWavBlob) return;
-  toast('Trimming…');
-
-  const dur        = trimAudioBuffer.duration;
+  stopTrimPlay();
+  toast('Trimming\u2026');
+  const dur = trimAudioBuffer.duration;
   const sampleRate = trimAudioBuffer.sampleRate;
-  const numCh      = trimAudioBuffer.numberOfChannels;
-  const startSamp  = Math.floor(trimStartPct * dur * sampleRate);
-  const endSamp    = Math.floor(trimEndPct   * dur * sampleRate);
-  const length     = endSamp - startSamp;
-
-  const actx       = new (window.AudioContext || window.webkitAudioContext)();
-  const trimmed    = actx.createBuffer(numCh, length, sampleRate);
-  for (let ch = 0; ch < numCh; ch++) {
-    trimmed.copyToChannel(
-      trimAudioBuffer.getChannelData(ch).slice(startSamp, endSamp), ch
-    );
-  }
+  const numCh = trimAudioBuffer.numberOfChannels;
+  const startSamp = Math.floor(trimStartPct * dur * sampleRate);
+  const endSamp = Math.floor(trimEndPct * dur * sampleRate);
+  const length = endSamp - startSamp;
+  const actx = new (window.AudioContext || window.webkitAudioContext)();
+  const trimmed = actx.createBuffer(numCh, length, sampleRate);
+  for (let ch = 0; ch < numCh; ch++) trimmed.copyToChannel(trimAudioBuffer.getChannelData(ch).slice(startSamp, endSamp), ch);
   actx.close();
-
-  // Re-encode to WAV
-  const wavBuf  = audioBufferToWav(trimmed);
-  pendingWavBlob = new Blob([wavBuf], { type: 'audio/wav' });
-
-  // Update displayed duration
-  const newDur  = length / sampleRate;
-  const m = Math.floor(newDur / 60);
-  const s = Math.round(newDur % 60);
-  recSecs = Math.round(newDur);
-
-  // Clean up preview blob URL
-  const preview = document.getElementById('trim-preview');
-  if (preview._blobUrl) { URL.revokeObjectURL(preview._blobUrl); preview._blobUrl = null; preview.src = ''; }
+  pendingWavBlob = new Blob([audioBufferToWav(trimmed)], { type: 'audio/wav' });
+  recSecs = Math.round(length / sampleRate);
+  if (trimAudioSrc) { URL.revokeObjectURL(trimAudioSrc); trimAudioSrc = null; }
   trimAudioBuffer = null;
-
   document.getElementById('trimOverlay').classList.remove('open');
   document.getElementById('saveOverlay').classList.add('open');
-  toast('Trimmed ✓ — now save or discard');
+  requestAnimationFrame(() => rebuildTagGrids());
+  toast('Trimmed \u2713 \u2014 now save or discard');
 }
 
 function cancelTrim() {
-  const preview = document.getElementById('trim-preview');
-  if (preview._blobUrl) { URL.revokeObjectURL(preview._blobUrl); preview._blobUrl = null; preview.src = ''; }
+  stopTrimPlay();
+  if (trimAudioSrc) { URL.revokeObjectURL(trimAudioSrc); trimAudioSrc = null; }
   trimAudioBuffer = null;
   document.getElementById('trimOverlay').classList.remove('open');
   document.getElementById('saveOverlay').classList.add('open');
+  requestAnimationFrame(() => rebuildTagGrids());
 }
-
 
 function openManage(kind) {
   managingKind = kind;
@@ -2094,7 +2134,7 @@ async function addNewTag() {
 
 function closeManage() {
   document.getElementById('manageOverlay').classList.remove('open');
-  rebuildTagGrids();
+  requestAnimationFrame(() => rebuildTagGrids());
 }
 
 // ── Overlays close on backdrop tap ──
