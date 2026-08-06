@@ -761,9 +761,12 @@ select.finput { appearance: none; }
     </div>
     <label class="flabel">Track name</label>
     <input id="editTrackName" class="finput" />
-    <label class="flabel">Track notes</label>
-    <textarea id="editTrackNote" class="finput"></textarea>
-    <button class="save-btn" onclick="saveTrackEdit()">Save</button>
+    <div class="tag-sect-lbl type" style="margin-top:12px">
+      <span>Type</span>
+      <span class="manage-lnk" onclick="openManage('type')">manage</span>
+    </div>
+    <div class="stag-grid" id="editTrackTypeGrid"></div>
+    <button class="save-btn" onclick="saveTrackEdit()" style="margin-top:16px">Save</button>
   </div>
 </div>
 
@@ -1415,15 +1418,22 @@ function openEditTrack(songId, trackId) {
   if (!track) return;
   editingTrackSongId = songId; editingTrackId = trackId;
   document.getElementById('editTrackName').value = track.name;
-  document.getElementById('editTrackNote').value = track.note || '';
+  // Populate type tag grid with current track selections
+  const grid = document.getElementById('editTrackTypeGrid');
+  const current = track.typeTags || [];
+  grid.innerHTML = typeTags.map(t =>
+    `<div class="stag${current.includes(t)?' st':''}" onclick="this.classList.toggle('st')">${esc(t)}</div>`
+  ).join('');
   document.getElementById('editTrackOverlay').classList.add('open');
 }
 
 async function saveTrackEdit() {
   const name = document.getElementById('editTrackName').value.trim();
-  const note = document.getElementById('editTrackNote').value.trim();
+  const selectedTypes = Array.from(document.querySelectorAll('#editTrackTypeGrid .stag.st')).map(el => el.textContent);
   songs = songs.map(s => s.id === editingTrackSongId
-    ? { ...s, tracks: s.tracks.map(t => t.id === editingTrackId ? { ...t, name: name || t.name, note } : t) }
+    ? { ...s, tracks: s.tracks.map(t => t.id === editingTrackId
+        ? { ...t, name: name || t.name, typeTags: selectedTypes }
+        : t) }
     : s);
   await saveSongs();
   closeSheet('editTrack');
