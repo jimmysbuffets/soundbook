@@ -814,9 +814,12 @@ function openDB() {
 function dbPut(store, val) {
   return new Promise((res, rej) => {
     const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).put(val);
-    req.onsuccess = () => res();
-    req.onerror = () => rej(req.error);
+    tx.objectStore(store).put(val);
+    // Resolve only when the transaction has truly committed to disk.
+    // Quota / low-storage failures surface here (abort), not on the request.
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error || new Error('Write failed'));
+    tx.onabort = () => rej(tx.error || new Error('Write aborted (storage full?)'));
   });
 }
 
@@ -1101,15 +1104,20 @@ async function saveMemo() {
     ? Math.floor(recSecs / 60) + ':' + String(recSecs % 60).padStart(2, '0')
     : '0:00';
   const capturedSecs = recSecs;
-  recSecs = 0;
-
+  const songsBackup = songs;
   const isVideo = recordingMode === 'video';
   let audioId = null;
-  if (pendingWavBlob) {
-    audioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
-    await dbPut('audio', { id: audioId, blob: pendingWavBlob, isVideo });
-    pendingWavBlob = null;
+  try {
+    if (pendingWavBlob) {
+      audioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
+      await dbPut('audio', { id: audioId, blob: pendingWavBlob, isVideo });
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Could not save the recording — your phone is probably out of storage.\n\nThe save sheet is still open. Free up space, then tap Save again.');
+    return;
   }
+  recSecs = 0;
 
   const trackTitle = document.getElementById('trackTitle').value.trim() || (isVideo ? 'Video take' : 'New track');
   const newTrack = {
@@ -1145,7 +1153,17 @@ async function saveMemo() {
     songs.unshift(newSong);
   }
 
-  await saveSongs();
+  try {
+    await saveSongs();
+  } catch (err) {
+    console.error(err);
+    songs = songsBackup;
+    if (audioId) { try { await dbDelete('audio', audioId); } catch (e) {} }
+    recSecs = capturedSecs;
+    alert('Could not save — your phone is probably out of storage.\n\nThe save sheet is still open. Free up space, then tap Save again.');
+    return;
+  }
+  pendingWavBlob = null;
   closeSheet('save');
   renderAll();
   toast('Saved ✓');
@@ -1712,7 +1730,6 @@ async function openSaveSheet() {
   }
   document.getElementById('trackSection').style.display = 'block';
   document.getElementById('trackTitle').value = '';
-  document.getElementById('trackNote').value = '';
   selProjectTags = []; selCategoryTags = []; selTypeTags = [];
   document.getElementById('saveOverlay').classList.add('open');
   // Rebuild grids after sheet is visible so elements are in the painted DOM
@@ -1753,7 +1770,6 @@ function openNewSong() {
   document.getElementById('songTitle').value = '';
   document.getElementById('songNote').value = '';
   document.getElementById('trackTitle').value = '';
-  document.getElementById('trackNote').value = '';
   selProjectTags = []; selCategoryTags = []; selTypeTags = [];
   document.getElementById('saveOverlay').classList.add('open');
   requestAnimationFrame(() => rebuildTagGrids());
@@ -2271,9 +2287,30 @@ if ('serviceWorker' in navigator) {
 
 // ── Init ──
 async function init() {
-  await openDB();
-  await loadData();
+  // Ask Chrome not to evict our data when the phone runs low on space
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      const already = await navigator.storage.persisted();
+      if (!already) await navigator.storage.persist();
+    }
+  } catch (e) {}
+  try {
+    await openDB();
+    await loadData();
+  } catch (err) {
+    console.error(err);
+    alert('Soundbook could not open its storage: ' + (err && err.message ? err.message : err));
+  }
   renderAll();
+  // Warn when the phone is nearly full
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      const { usage, quota } = await navigator.storage.estimate();
+      if (quota && (quota - usage) < 200 * 1024 * 1024) {
+        toast('Storage nearly full — free up space or recordings may not save');
+      }
+    }
+  } catch (e) {}
 }
 
 init();
