@@ -986,8 +986,9 @@ async function toggleRecord(mode) {
       openSaveSheet().catch(err => {
         console.error('openSaveSheet error:', err);
         toast('Error: ' + err.message);
-        // Force sheet open even if processing failed
-        document.getElementById('saveOverlay').classList.add('open');
+        // Force sheet open even if processing failed, with tag options
+        selProjectTags = []; selCategoryTags = []; selTypeTags = [];
+        showSaveOverlay();
       });
     };
     recording = false;
@@ -1731,9 +1732,7 @@ async function openSaveSheet() {
   document.getElementById('trackSection').style.display = 'block';
   document.getElementById('trackTitle').value = '';
   selProjectTags = []; selCategoryTags = []; selTypeTags = [];
-  document.getElementById('saveOverlay').classList.add('open');
-  // Rebuild grids after sheet is visible so elements are in the painted DOM
-  requestAnimationFrame(() => rebuildTagGrids());
+  showSaveOverlay();
 }
 
 function openEditPicker() {
@@ -1771,8 +1770,7 @@ function openNewSong() {
   document.getElementById('songNote').value = '';
   document.getElementById('trackTitle').value = '';
   selProjectTags = []; selCategoryTags = []; selTypeTags = [];
-  document.getElementById('saveOverlay').classList.add('open');
-  requestAnimationFrame(() => rebuildTagGrids());
+  showSaveOverlay();
 }
 
 function editSong(songId) {
@@ -1788,8 +1786,7 @@ function editSong(songId) {
   selProjectTags  = [...(s.projectTags  || [])];
   selCategoryTags = [...(s.categoryTags || [])];
   selTypeTags = [];
-  document.getElementById('saveOverlay').classList.add('open');
-  requestAnimationFrame(() => rebuildTagGrids());
+  showSaveOverlay();
 }
 
 function startAddTrack(songId) {
@@ -1831,6 +1828,13 @@ function setDest(mode, btn) {
 function rebuildSongSelect() {
   document.getElementById('songSelect').innerHTML = songs.map(s =>
     `<option value="${s.id}">${esc(s.title)}</option>`).join('');
+}
+
+function showSaveOverlay() {
+  document.getElementById('saveOverlay').classList.add('open');
+  rebuildTagGrids();
+  requestAnimationFrame(() => rebuildTagGrids());
+  setTimeout(rebuildTagGrids, 150);
 }
 
 function rebuildTagGrids() {
@@ -2044,8 +2048,7 @@ async function applyTrim() {
   if (trimAudioSrc) { URL.revokeObjectURL(trimAudioSrc); trimAudioSrc = null; }
   trimAudioBuffer = null;
   document.getElementById('trimOverlay').classList.remove('open');
-  document.getElementById('saveOverlay').classList.add('open');
-  requestAnimationFrame(() => rebuildTagGrids());
+  showSaveOverlay();
   toast('Trimmed \u2713 \u2014 now save or discard');
 }
 
@@ -2054,8 +2057,7 @@ function cancelTrim() {
   if (trimAudioSrc) { URL.revokeObjectURL(trimAudioSrc); trimAudioSrc = null; }
   trimAudioBuffer = null;
   document.getElementById('trimOverlay').classList.remove('open');
-  document.getElementById('saveOverlay').classList.add('open');
-  requestAnimationFrame(() => rebuildTagGrids());
+  showSaveOverlay();
 }
 
 function openManage(kind) {
