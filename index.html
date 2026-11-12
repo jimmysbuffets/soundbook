@@ -645,7 +645,7 @@ select.finput { appearance: none; }
     </div>
 
     <!-- Track fields: name and Type tags only -->
-    <div id="trackSection">
+    <div id="trackSection" style="margin-top:16px">
       <label class="flabel">Track name</label>
       <input id="trackTitle" class="finput" placeholder="e.g. Guitar take 1, rough vocal…" />
       <div class="tag-sect-lbl type" style="margin-top:12px">
@@ -1903,9 +1903,21 @@ async function openTrimmer() {
   trimStartPct = 0; trimEndPct = 1;
   document.getElementById('saveOverlay').classList.remove('open');
   document.getElementById('trimOverlay').classList.add('open');
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    drawTrimWaveform(); updateTrimHandles(); initTrimInteraction();
-  }));
+  // Draw right away, then again as the sheet finishes sliding in
+  // (width can read 0 or wrong mid-animation, which left the canvas blank)
+  const paint = () => { drawTrimWaveform(); updateTrimHandles(); };
+  initTrimInteraction();   // clones the wrap, so do it before painting
+  paint();
+  requestAnimationFrame(paint);
+  [80, 200, 400, 700].forEach(ms => setTimeout(() => {
+    if (document.getElementById('trimOverlay').classList.contains('open')) paint();
+  }, ms));
+  const wrapEl = document.getElementById('trimmer-wrap');
+  if (window.ResizeObserver && wrapEl) {
+    if (window._trimRO) window._trimRO.disconnect();
+    window._trimRO = new ResizeObserver(() => paint());
+    window._trimRO.observe(wrapEl);
+  }
 }
 
 function drawTrimWaveform() {
@@ -2255,6 +2267,7 @@ document.getElementById('rec-bar').addEventListener('click', () => clearSelectio
 let toastTimer;
 function toast(msg) {
   const el = document.getElementById('toast');
+  if (!msg) { el.classList.remove('show'); return; }   // empty toast used to show a blank pill
   el.textContent = msg; el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
