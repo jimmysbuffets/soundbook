@@ -1978,15 +1978,18 @@ function toggleTrimPlay() {
     const p = currentLeft / (wrap.clientWidth || 300);
     if (p >= trimStartPct && p < trimEndPct) startPct = p;
   }
-  trimPlayer = new Audio(trimAudioSrc);
-  trimPlayer.currentTime = startPct * dur;
+  const p = new Audio(trimAudioSrc);
+  trimPlayer = p;
   const endTime = trimEndPct * dur;
-  trimPlayer.ontimeupdate = () => {
-    if (trimPlayer.currentTime >= endTime) { stopTrimPlay(); return; }
-    updatePlayhead(trimPlayer.currentTime / dur);
+  p.addEventListener('loadedmetadata', () => { try { p.currentTime = startPct * dur; } catch(e) {} });
+  p.ontimeupdate = () => {
+    if (p.currentTime >= endTime) { if (trimPlayer === p) stopTrimPlay(); return; }
+    updatePlayhead(p.currentTime / dur);
   };
-  trimPlayer.onended = () => stopTrimPlay();
-  trimPlayer.play();
+  p.onended = () => { if (trimPlayer === p) stopTrimPlay(); };
+  p.onerror = () => { toast('Cannot play preview'); if (trimPlayer === p) stopTrimPlay(); };
+  const pr = p.play();
+  if (pr && pr.catch) pr.catch(err => { toast('Playback blocked: ' + err.message); if (trimPlayer === p) stopTrimPlay(); });
   const icon = document.getElementById('trim-play-icon');
   if (icon) icon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
 }
@@ -2032,9 +2035,6 @@ function initTrimInteraction() {
   wrap.addEventListener('mousedown',  e => { startDrag(e.clientX); e.preventDefault(); });
   window.addEventListener('mousemove', e => { if (dragMode) handleMove(e.clientX); });
   window.addEventListener('mouseup',   () => { dragMode = null; });
-  // Re-wire play button
-  const playBtn = document.getElementById('trim-play-btn');
-  if (playBtn) { const fresh = playBtn.cloneNode(true); playBtn.parentNode.replaceChild(fresh, playBtn); document.getElementById('trim-play-btn').addEventListener('click', toggleTrimPlay); }
 }
 
 async function applyTrim() {
