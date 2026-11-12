@@ -866,7 +866,7 @@ let editingTrackSongId = null, editingTrackId = null;
 // ── Audio recording ──
 let mediaRecorder = null, audioChunks = [], recStream = null;
 let recording = false, recSecs = 0, recInt = null;
-let analyser = null, animFrame = null;
+let analyser = null, animFrame = null, analyserCtx = null;
 
 // ── Playback ──
 let currentAudio = null, currentPlayId = null;
@@ -957,6 +957,8 @@ async function toggleRecord(mode) {
     if (recStream) recStream.getTracks().forEach(t => t.stop());
     clearInterval(recInt);
     cancelAnimationFrame(animFrame);
+    analyser = null;
+    if (analyserCtx) { try { analyserCtx.close(); } catch(e) {} analyserCtx = null; }
 
     // Hide camera preview if video
     if (recordingMode === 'video') {
@@ -1033,6 +1035,7 @@ async function toggleRecord(mode) {
   // Waveform analyser (audio only — too costly during video)
   if (!isVideo) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+    analyserCtx = audioCtx;
     const source = audioCtx.createMediaStreamSource(recStream);
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
@@ -1191,6 +1194,11 @@ async function loadTrackPlayer(track) {
   const player = document.getElementById(playerId);
   if (!player) return;
   if (player._blobUrl) return;  // already loaded
+  player.onerror = () => {
+    const c = player.error ? player.error.code : '?';
+    toast('Cannot play this track (error ' + c + ')');
+    console.error('Player error', player.error);
+  };
 
   const rec = await dbGet('audio', track.audioId);
   if (!rec) { toast('Media not found in storage'); return; }
