@@ -1259,6 +1259,258 @@ function svgPause() {
 }
 
 // ── Share / Export ──
+const MP3_ENWIN=[0, -1, -1, -1, -1, -1, -1, -2, -2, -2, -2, -3, -3, -4, -4, -5, -5, -6, -7, -7, -8, -9, -10, -11, -13, -14, -16, -17, -19, -21, -24, -26, -29, -31, -35, -38, -41, -45, -49, -53, -58, -63, -68, -73, -79, -85, -91, -97, -104, -111, -117, -125, -132, -139, -147, -154, -161, -169, -176, -183, -190, -196, -202, -208, 213, 218, 222, 225, 227, 228, 228, 227, 224, 221, 215, 208, 200, 189, 177, 163, 146, 127, 106, 83, 57, 29, -2, -36, -72, -111, -153, -197, -244, -294, -347, -401, -459, -519, -581, -645, -711, -779, -848, -919, -991, -1064, -1137, -1210, -1283, -1356, -1428, -1498, -1567, -1634, -1698, -1759, -1817, -1870, -1919, -1962, -2001, -2032, -2057, -2075, -2085, -2087, -2080, -2063, 2037, 2000, 1952, 1893, 1822, 1739, 1644, 1535, 1414, 1280, 1131, 970, 794, 605, 402, 185, -45, -288, -545, -814, -1095, -1388, -1692, -2006, -2330, -2663, -3004, -3351, -3705, -4063, -4425, -4788, -5153, -5517, -5879, -6237, -6589, -6935, -7271, -7597, -7910, -8209, -8491, -8755, -8998, -9219, -9416, -9585, -9727, -9838, -9916, -9959, -9966, -9935, -9863, -9750, -9592, -9389, -9139, -8840, -8492, -8092, -7640, -7134, 6574, 5959, 5288, 4561, 3776, 2935, 2037, 1082, 70, -998, -2122, -3300, -4533, -5818, -7154, -8540, -9975, -11455, -12980, -14548, -16155, -17799, -19478, -21189, -22929, -24694, -26482, -28289, -30112, -31947, -33791, -35640, -37489, -39336, -41176, -43006, -44821, -46617, -48390, -50137, -51853, -53534, -55178, -56778, -58333, -59838, -61289, -62684, -64019, -65290, -66494, -67629, -68692, -69679, -70590, -71420, -72169, -72835, -73415, -73908, -74313, -74630, -74856, -74992, 75038];
+const MP3_H16_LEN=[1, 4, 6, 8, 9, 9, 10, 10, 11, 11, 11, 12, 12, 12, 13, 9, 3, 4, 6, 7, 8, 9, 9, 9, 10, 10, 10, 11, 12, 11, 12, 8, 6, 6, 7, 8, 9, 9, 10, 10, 11, 10, 11, 11, 11, 12, 12, 9, 8, 7, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13, 10, 9, 8, 9, 9, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 9, 9, 8, 9, 9, 10, 11, 11, 12, 11, 12, 12, 13, 13, 13, 14, 10, 10, 9, 9, 10, 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 14, 10, 10, 9, 10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 13, 15, 15, 10, 10, 10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 13, 14, 14, 14, 10, 11, 10, 10, 11, 11, 12, 12, 13, 13, 13, 13, 14, 13, 14, 13, 11, 11, 11, 10, 11, 12, 12, 12, 12, 13, 14, 14, 14, 15, 15, 14, 10, 12, 11, 11, 11, 12, 12, 13, 14, 14, 14, 14, 14, 14, 13, 14, 11, 12, 12, 12, 12, 12, 13, 13, 13, 13, 15, 14, 14, 14, 14, 16, 11, 14, 12, 12, 12, 13, 13, 14, 14, 14, 16, 15, 15, 15, 17, 15, 11, 13, 13, 11, 12, 14, 14, 13, 14, 14, 15, 16, 15, 17, 15, 14, 11, 9, 8, 8, 9, 9, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 8];
+const MP3_H16_CODE=[1, 5, 14, 44, 74, 63, 110, 93, 172, 149, 138, 242, 225, 195, 376, 17, 3, 4, 12, 20, 35, 62, 53, 47, 83, 75, 68, 119, 201, 107, 207, 9, 15, 13, 23, 38, 67, 58, 103, 90, 161, 72, 127, 117, 110, 209, 206, 16, 45, 21, 39, 69, 64, 114, 99, 87, 158, 140, 252, 212, 199, 387, 365, 26, 75, 36, 68, 65, 115, 101, 179, 164, 155, 264, 246, 226, 395, 382, 362, 9, 66, 30, 59, 56, 102, 185, 173, 265, 142, 253, 232, 400, 388, 378, 445, 16, 111, 54, 52, 100, 184, 178, 160, 133, 257, 244, 228, 217, 385, 366, 715, 10, 98, 48, 91, 88, 165, 157, 148, 261, 248, 407, 397, 372, 380, 889, 884, 8, 85, 84, 81, 159, 156, 143, 260, 249, 427, 401, 392, 383, 727, 713, 708, 7, 154, 76, 73, 141, 131, 256, 245, 426, 406, 394, 384, 735, 359, 710, 352, 11, 139, 129, 67, 125, 247, 233, 229, 219, 393, 743, 737, 720, 885, 882, 439, 4, 243, 120, 118, 115, 227, 223, 396, 746, 742, 736, 721, 712, 706, 223, 436, 6, 202, 224, 222, 218, 216, 389, 386, 381, 364, 888, 443, 707, 440, 437, 1728, 4, 747, 211, 210, 208, 370, 379, 734, 723, 714, 1735, 883, 877, 876, 3459, 865, 2, 377, 369, 102, 187, 726, 722, 358, 711, 709, 866, 1734, 871, 3458, 870, 434, 0, 12, 10, 7, 11, 10, 17, 11, 9, 13, 12, 10, 7, 5, 3, 1, 3];
+
+// ── MP3 encoder (MPEG-1 Layer III, mono, CBR) ──
+// Used ONLY when sharing a track, to make a small copy that texts and plays on iPhone.
+// Stored recordings are never touched.
+async function mp3Encode(pcm, srcRate, kbps, onProgress) {
+  kbps = kbps || 128;
+  const RATES = {48000: 1, 44100: 0, 32000: 2};
+  let sr = srcRate;
+  if (!(sr in RATES)) {                       // other rates: resample to 44.1 kHz (linear)
+    const ratio = srcRate / 44100, n = Math.floor(pcm.length / ratio), res = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const p = i * ratio, j = Math.floor(p), f = p - j; res[i] = (pcm[j] || 0) * (1 - f) + (pcm[j + 1] || 0) * f; }
+    pcm = res; sr = 44100;
+  }
+  const BR_IDX = {32:1,40:2,48:3,56:4,64:5,80:6,96:7,112:8,128:9,160:10,192:11};
+
+  // polyphase analysis window and matrix
+  const WIN = new Float64Array(512);
+  for (let i = 0; i <= 256; i++) {
+    let v = MP3_ENWIN[i]; WIN[i] = v;
+    if ((i & 63) !== 0) v = -v;
+    if (i !== 0) WIN[512 - i] = v;
+  }
+  for (let i = 0; i < 512; i++) WIN[i] = WIN[i] / 65536 / 32;
+  const MAT = new Float64Array(32 * 64);
+  for (let k = 0; k < 32; k++) for (let i = 0; i < 64; i++) MAT[k * 64 + i] = Math.cos((2 * k + 1) * (i - 16) * Math.PI / 64);
+
+  // MDCT tables (window folded in)
+  const MWIN = new Float64Array(36); for (let i = 0; i < 36; i++) MWIN[i] = Math.sin(Math.PI / 36 * (i + 0.5));
+  const MCOS = new Float64Array(18 * 36);
+  for (let k = 0; k < 18; k++) for (let n = 0; n < 36; n++) MCOS[k * 36 + n] = Math.cos(Math.PI / 72 * (2 * n + 1 + 18) * (2 * k + 1)) * MWIN[n] / 9;
+  const CI = [-0.6,-0.535,-0.33,-0.185,-0.095,-0.041,-0.0142,-0.0037];
+  const CS = CI.map(c => 1 / Math.sqrt(1 + c * c)), CA = CI.map(c => c / Math.sqrt(1 + c * c));
+
+  const DELAY = 481;
+  const nFrames = Math.ceil((pcm.length + 528 + 1) / 1152) + 1;
+  const sbBuf = new Float64Array(36 * 32);      // subband samples for the current frame
+  const hist = new Float64Array(512), Y = new Float64Array(64);
+  const prev = new Float64Array(32 * 18);       // previous granule's subband samples
+  const cur = new Float64Array(36);
+  const xr = new Float64Array(576), a43 = new Float64Array(576), ix = new Int32Array(576);
+  const lowpassBin = Math.min(576, Math.floor(576 * 16500 / (sr / 2)));
+  const brBits = kbps * 1000;
+  const chunks = []; let totalBytes = 0, padAcc = 0;
+  let out, bytePos, bitPos;
+
+  function putBits(val, n) {
+    while (n > 0) {
+      const room = 8 - bitPos, take = n < room ? n : room;
+      out[bytePos] |= ((val >>> (n - take)) & ((1 << take) - 1)) << (room - take);
+      bitPos += take; n -= take;
+      if (bitPos === 8) { bitPos = 0; bytePos++; }
+    }
+  }
+  function analyseFrame(f) {
+    for (let s = 0; s < 36; s++) {
+      const base = (f * 36 + s) * 32 - DELAY;
+      hist.copyWithin(32, 0, 480);
+      for (let i = 0; i < 32; i++) { const p = base + 31 - i; hist[i] = (p >= 0 && p < pcm.length) ? pcm[p] : 0; }
+      for (let i = 0; i < 64; i++) {
+        let sum = 0; for (let j = 0; j < 8; j++) sum += WIN[i + 64 * j] * hist[i + 64 * j];
+        Y[i] = sum;
+      }
+      for (let k = 0; k < 32; k++) {
+        let sum = 0; const o = k * 64; for (let i = 0; i < 64; i++) sum += MAT[o + i] * Y[i];
+        sbBuf[s * 32 + k] = sum;
+      }
+    }
+  }
+  function granuleSpectrum(slot0) {
+    for (let k = 0; k < 32; k++) {
+      for (let n = 0; n < 18; n++) {
+        cur[n] = prev[k * 18 + n];
+        let v = sbBuf[(slot0 + n) * 32 + k];
+        if ((k & 1) && (n & 1)) v = -v;          // frequency inversion
+        cur[18 + n] = v; prev[k * 18 + n] = v;
+      }
+      for (let i = 0; i < 18; i++) {
+        let sum = 0; const o = i * 36; for (let n = 0; n < 36; n++) sum += cur[n] * MCOS[o + n];
+        xr[k * 18 + i] = sum;
+      }
+    }
+    for (let k = 1; k < 32; k++) for (let i = 0; i < 8; i++) {   // alias reduction
+      const bu = xr[18 * k - 1 - i], bd = xr[18 * k + i];
+      xr[18 * k - 1 - i] = bu * CS[i] + bd * CA[i];
+      xr[18 * k + i]     = bd * CS[i] - bu * CA[i];
+    }
+    for (let i = lowpassBin; i < 576; i++) xr[i] = 0;
+  }
+  function quantize(gg) {
+    const inv = Math.pow(2, (gg - 210) / 4 * -0.75);
+    let maxv = 0;
+    for (let i = 0; i < lowpassBin; i++) {
+      const v = Math.floor(a43[i] * inv + 0.4054); ix[i] = v;
+      if (v > maxv) { maxv = v; if (v > 8206) return v; }   // cannot be coded: stop early
+    }
+    return maxv;
+  }
+  const LIM = [16,18,22,30,78,270,1038,8206], LB = [1,2,3,4,6,8,10,13];
+  function countBits(lb) {
+    let last = 575; while (last >= 0 && ix[last] === 0) last--;
+    const pairs = (last + 2) >> 1; let bits = 0;
+    for (let p = 0; p < pairs; p++) {
+      const a = ix[2 * p], b = ix[2 * p + 1];
+      bits += MP3_H16_LEN[(a > 15 ? 15 : a) * 16 + (b > 15 ? 15 : b)];
+      if (a >= 15) bits += lb; if (b >= 15) bits += lb;
+      if (a > 0) bits++; if (b > 0) bits++;
+    }
+    return [bits, pairs];
+  }
+
+  for (let f = 0; f < nFrames; f++) {
+    if (f % 60 === 0) {
+      if (onProgress) onProgress(f / nFrames);
+      await new Promise(r => setTimeout(r, 0));   // let the page breathe
+    }
+    analyseFrame(f);
+    const exact = 144 * brBits / sr, base = Math.floor(exact);
+    padAcc += exact - base;
+    let padding = 0; if (padAcc >= 1) { padding = 1; padAcc -= 1; }
+    const frameBytes = base + padding;
+    out = new Uint8Array(frameBytes); bytePos = 0; bitPos = 0;
+    putBits(0x7FF, 11); putBits(3, 2); putBits(1, 2); putBits(1, 1);
+    putBits(BR_IDX[kbps], 4); putBits(RATES[sr], 2); putBits(padding, 1); putBits(0, 1);
+    putBits(3, 2); putBits(0, 2); putBits(0, 1); putBits(1, 1); putBits(0, 2);
+
+    const dataBits = (frameBytes - 4 - 17) * 8, gr = [];
+    for (let gi = 0; gi < 2; gi++) {
+      granuleSpectrum(gi * 18);
+      for (let i = 0; i < 576; i++) a43[i] = Math.pow(Math.abs(xr[i]), 0.75);
+      const budget = gi === 0 ? (dataBits >> 1) : dataBits - gr[0].bits;
+      let peak = 0; for (let i = 0; i < lowpassBin; i++) if (a43[i] > peak) peak = a43[i];
+      let lo = 0, hi = 255, best = null;
+      if (peak > 8206) lo = Math.max(0, Math.floor(210 + Math.log2(peak / 8206) / 0.1875) - 1);
+      while (lo <= hi) {
+        const gg = (lo + hi) >> 1, maxv = quantize(gg);
+        let ts = -1; for (let i = 0; i < 8; i++) if (maxv <= LIM[i]) { ts = i; break; }
+        let ok = false;
+        if (ts >= 0) { const [bits, pairs] = countBits(LB[ts]); if (bits <= budget) { ok = true; best = {gg, ts: 16 + ts, lb: LB[ts], bits, pairs}; } }
+        if (ok) hi = gg - 1; else lo = gg + 1;
+      }
+      if (!best) { best = {gg: 255, ts: 16, lb: 1, bits: 0, pairs: 0}; for (let i = 0; i < 576; i++) ix[i] = 0; }
+      else quantize(best.gg);
+      best.ix = Int32Array.from(ix);
+      best.neg = Uint8Array.from(xr, v => v < 0 ? 1 : 0);
+      gr.push(best);
+    }
+    putBits(0, 9); putBits(0, 5); putBits(0, 4);       // main_data_begin, private, scfsi
+    for (let gi = 0; gi < 2; gi++) {
+      const G = gr[gi];
+      putBits(G.bits, 12); putBits(G.pairs, 9); putBits(G.gg, 8); putBits(0, 4); putBits(0, 1);
+      putBits(G.ts, 5); putBits(G.ts, 5); putBits(G.ts, 5);
+      putBits(7, 4); putBits(3, 3); putBits(0, 1); putBits(0, 1); putBits(0, 1);
+    }
+    for (let gi = 0; gi < 2; gi++) {
+      const G = gr[gi], q = G.ix, lb = G.lb;
+      for (let p = 0; p < G.pairs; p++) {
+        const a = q[2 * p], b = q[2 * p + 1], ca = a > 15 ? 15 : a, cb = b > 15 ? 15 : b, idx = ca * 16 + cb;
+        putBits(MP3_H16_CODE[idx], MP3_H16_LEN[idx]);
+        if (ca === 15) putBits(a - 15, lb);
+        if (a > 0) putBits(G.neg[2 * p], 1);
+        if (cb === 15) putBits(b - 15, lb);
+        if (b > 0) putBits(G.neg[2 * p + 1], 1);
+      }
+    }
+    chunks.push(out); totalBytes += frameBytes;
+  }
+  const mp3 = new Uint8Array(totalBytes); let o = 0;
+  for (const c of chunks) { mp3.set(c, o); o += c.length; }
+  return mp3;
+}
+
+// ── MP3 copies for sharing ──
+// Recordings are stored as WAV and stay that way. When you share an audio track we make a
+// small MP3 copy in memory (so it texts fine and plays on iPhone). It is never saved.
+const mp3Cache = new Map();   // audioId -> File (memory only; gone when the app closes)
+
+function safeName(song, track) { return (song.title + '_' + track.name).replace(/[^a-z0-9]/gi, '_'); }
+
+async function getShareAudioFile(track, song) {
+  if (mp3Cache.has(track.audioId)) return mp3Cache.get(track.audioId);
+  const rec = await dbGet('audio', track.audioId);
+  if (!rec) throw new Error('Media not found');
+  const base = safeName(song, track);
+  let file;
+  try {
+    const ab = await rec.blob.arrayBuffer();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+    let decoded;
+    try { decoded = await ctx.decodeAudioData(ab); } finally { ctx.close(); }
+    const n = decoded.length, ch = decoded.numberOfChannels, pcm = new Float32Array(n);
+    for (let c = 0; c < ch; c++) { const d = decoded.getChannelData(c); for (let i = 0; i < n; i++) pcm[i] += d[i] / ch; }
+    const mp3 = await mp3Encode(pcm, decoded.sampleRate, 128, p => toast('Preparing MP3… ' + Math.round(p * 100) + '%'));
+    file = new File([mp3], base + '.mp3', { type: 'audio/mpeg' });
+    mp3Cache.set(track.audioId, file);
+  } catch (e) {
+    console.error('MP3 conversion failed, sharing WAV instead', e);
+    toast('MP3 conversion failed — sharing WAV');
+    file = new File([rec.blob], base + '.wav', { type: rec.blob.type || 'audio/wav' });
+  }
+  return file;
+}
+
+// Chrome only lets share() run within a few seconds of a tap. Converting can take longer,
+// so if the share is refused we show a "Share" button that gives us a fresh tap.
+let pendingShare = null;
+function showShareReady(files, title, text) {
+  pendingShare = { files, title, text };
+  let box = document.getElementById('shareReady');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'shareReady';
+    box.style.cssText = 'position:fixed;left:16px;right:16px;bottom:24px;z-index:9999;background:#1c1c1e;border:1px solid #3a3a3c;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.6)';
+    box.innerHTML = '<div id="shareReadyMsg" style="flex:1;color:#fff;font-size:14px"></div>' +
+      '<button id="shareReadyGo" style="background:#c8f060;color:#111;border:0;border-radius:10px;padding:10px 18px;font-weight:600;font-size:15px">Share</button>' +
+      '<button id="shareReadyX" style="background:none;border:0;color:#999;font-size:20px;padding:4px 8px" aria-label="Close">✕</button>';
+    document.body.appendChild(box);
+    document.getElementById('shareReadyX').onclick = () => { box.style.display = 'none'; pendingShare = null; };
+    document.getElementById('shareReadyGo').onclick = async () => {
+      const p = pendingShare; if (!p) return;
+      try { await navigator.share({ title: p.title, text: p.text, files: p.files }); box.style.display = 'none'; pendingShare = null; }
+      catch (e) { if (e.name === 'AbortError') { box.style.display = 'none'; pendingShare = null; } else toast('Share failed: ' + e.message); }
+    };
+  }
+  const total = files.reduce((n, f) => n + f.size, 0);
+  document.getElementById('shareReadyMsg').textContent = 'Ready to share (' + (total / 1048576).toFixed(1) + ' MB)';
+  box.style.display = 'flex';
+}
+
+// returns true if handled by the share sheet
+async function shareFiles(files, title, text) {
+  if (!(navigator.share && navigator.canShare && navigator.canShare({ files }))) return false;
+  try {
+    await navigator.share({ title, text, files });
+  } catch (e) {
+    if (e.name === 'AbortError') return true;
+    if (e.name === 'NotAllowedError') { showShareReady(files, title, text); return true; }
+    throw e;
+  }
+  return true;
+}
+
+function downloadFiles(files) {
+  files.forEach(f => {
+    const url = URL.createObjectURL(f);
+    const a = document.createElement('a'); a.href = url; a.download = f.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
+}
+
 async function shareTrack(songId, trackId) {
   const song = songs.find(s => s.id === songId);
   const track = song?.tracks.find(t => t.id === trackId);
@@ -1275,34 +1527,27 @@ async function shareTrack(songId, trackId) {
     return;
   }
 
-  toast(track.isVideo ? 'Preparing video…' : 'Preparing audio…');
-  const audioRec = await dbGet('audio', track.audioId);
-  if (!audioRec) { toast('Media not found'); return; }
-
   try {
-    let shareBlob, filename;
+    let file;
     if (track.isVideo) {
-      shareBlob = audioRec.blob;
-      filename = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi, '_') + '.webm';
+      toast('Preparing video…');
+      const rec = await dbGet('audio', track.audioId);
+      if (!rec) { toast('Media not found'); return; }
+      file = new File([rec.blob], safeName(song, track) + '.webm', { type: rec.blob.type || 'video/webm' });
     } else {
-      // Already stored as WAV — share directly
-      shareBlob = audioRec.blob;
-      filename = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi, '_') + '.wav';
+      toast('Preparing MP3…');
+      file = await getShareAudioFile(track, song);
     }
-    const file = new File([shareBlob], filename, { type: shareBlob.type || 'application/octet-stream' });
-    const notesFile = new File([meta], filename.replace(/\.(wav|webm)$/, '_notes.txt'), { type: 'text/plain' });
-
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ title: track.name, files: [file, notesFile] });
+    // One media file per share: texting apps often mangle several attachments.
+    const handled = await shareFiles([file], track.name, track.name);
+    if (handled) {
+      if (track.isVideo) toast('Note: iPhones cannot play WebM video');
     } else {
-      const url = URL.createObjectURL(wavBlob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-      toast('WAV downloaded');
+      downloadFiles([file]);
+      toast(file.name.split('.').pop().toUpperCase() + ' downloaded');
     }
   } catch(e) {
-    toast('Export failed: ' + e.message);
+    if (e.name !== 'AbortError') toast('Export failed: ' + e.message);
   }
 }
 
@@ -1322,34 +1567,22 @@ async function shareSong(songId) {
     return;
   }
 
-  toast('Preparing song export…');
+  toast('Preparing song…');
   try {
     const files = [];
-    const notesFile = new File([meta], (song.title).replace(/[^a-z0-9]/gi,'_') + '_notes.txt', { type: 'text/plain' });
-    files.push(notesFile);
-
     for (const track of tracksWithAudio) {
-      const audioRec = await dbGet('audio', track.audioId);
-      if (!audioRec) continue;
-      let blob = audioRec.blob;
-      const fname = (song.title + '_' + track.name).replace(/[^a-z0-9]/gi,'_') + (track.isVideo ? '.webm' : '.wav');
-      files.push(new File([blob], fname, { type: blob.type || 'application/octet-stream' }));
-    }
-
-    if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
-      await navigator.share({ title: song.title, files });
-    } else {
-      // fallback: download each
-      for (const f of files) {
-        const url = URL.createObjectURL(f);
-        const a = document.createElement('a'); a.href = url; a.download = f.name; a.click();
-        await new Promise(r => setTimeout(r, 500));
-        URL.revokeObjectURL(url);
+      if (track.isVideo) {
+        const rec = await dbGet('audio', track.audioId);
+        if (rec) files.push(new File([rec.blob], safeName(song, track) + '.webm', { type: rec.blob.type || 'video/webm' }));
+      } else {
+        files.push(await getShareAudioFile(track, song));
       }
-      toast('Files downloaded');
     }
+    // Song details travel as the message text instead of a separate notes file.
+    const handled = await shareFiles(files, song.title, meta);
+    if (!handled) { downloadFiles(files); toast('Files downloaded'); }
   } catch(e) {
-    if (e.name !== 'AbortError') toast('Export failed');
+    if (e.name !== 'AbortError') toast('Export failed: ' + e.message);
   }
 }
 
