@@ -1428,7 +1428,18 @@ async function mp3Encode(pcm, srcRate, kbps, onProgress) {
     }
     chunks.push(out); totalBytes += frameBytes;
   }
-  const mp3 = new Uint8Array(totalBytes); let o = 0;
+  // Length header ("Info" frame), as written by standard encoders: tells players the exact
+  // number of frames and bytes so they show the right duration (iPhone otherwise shows 0:00).
+  const info = new Uint8Array(chunks[0].length);
+  info.set(chunks[0].subarray(0, 4));               // same header as the audio frames
+  info[2] &= 0xFD;                                  // no padding on this frame
+  const dv = new DataView(info.buffer);
+  info.set([0x49, 0x6E, 0x66, 0x6F], 21);           // "Info" after header + 17-byte mono side info
+  dv.setUint32(25, 3);                              // flags: frame count + byte count present
+  dv.setUint32(29, chunks.length);
+  dv.setUint32(33, totalBytes + info.length);
+  const mp3 = new Uint8Array(totalBytes + info.length);
+  mp3.set(info, 0); let o = info.length;
   for (const c of chunks) { mp3.set(c, o); o += c.length; }
   return mp3;
 }
