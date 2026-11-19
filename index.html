@@ -719,10 +719,16 @@ select.finput { appearance: none; }
       <span id="trim-end-lbl" style="font-size:11px;color:var(--acc);font-family:var(--mono);min-width:38px;text-align:right">0:00.0</span>
     </div>
 
-    <div style="display:flex;gap:10px;margin-top:14px">
+    <div id="trim-btns-new" style="display:flex;gap:10px;margin-top:14px">
       <button class="save-btn" onclick="cancelTrim()" style="background:transparent;border:1.5px solid var(--border2);color:var(--text2);flex:1">Cancel</button>
       <button class="save-btn" onclick="applyTrim()" style="flex:2">Apply trim</button>
     </div>
+    <div id="trim-btns-track" style="display:none;gap:8px;margin-top:14px">
+      <button class="save-btn" onclick="cancelTrim()" style="background:transparent;border:1.5px solid var(--border2);color:var(--text2);flex:1">Cancel</button>
+      <button class="save-btn" onclick="applyTrackTrim(false)" style="background:transparent;border:1.5px solid var(--acc);color:var(--acc);flex:1.3">Save as copy</button>
+      <button class="save-btn" onclick="applyTrackTrim(true)" style="flex:1.2">Replace original</button>
+    </div>
+    <div id="trim-busy" style="display:none;margin-top:14px;font-size:13px;color:var(--text2);text-align:center;font-family:var(--mono)"></div>
   </div>
 </div>
 
@@ -779,7 +785,8 @@ select.finput { appearance: none; }
       <span class="manage-lnk" onclick="openManage('type')">manage</span>
     </div>
     <div class="stag-grid" id="editTrackTypeGrid"></div>
-    <button class="save-btn" onclick="saveTrackEdit()" style="margin-top:16px">Save</button>
+    <button class="save-btn" onclick="openTrackTrimmer()" style="margin-top:16px;background:transparent;border:1.5px solid var(--acc);color:var(--acc)">✂ Trim this recording</button>
+    <button class="save-btn" onclick="saveTrackEdit()" style="margin-top:10px">Save</button>
   </div>
 </div>
 
@@ -2180,6 +2187,7 @@ let trimAudioBuffer = null;
 let trimStartPct = 0;
 let trimEndPct   = 1;
 let pendingWavBlob = null;
+let trimTarget = null;   // null = trimming a fresh recording; else {songId, trackId, isVideo, blob}
 let trimAudioSrc = null;
 let trimPlayer   = null;
 let trimPlayAnim = null;
@@ -2190,11 +2198,12 @@ function fmtSecs(s) {
   return `${m}:${sec}`;
 }
 
-async function openTrimmer() {
-  if (!pendingWavBlob) { toast('No audio to trim'); return; }
+async function openTrimmer(existingBlob) {
+  const srcBlob = existingBlob || pendingWavBlob;
+  if (!srcBlob) { toast('No audio to trim'); return; }
   toast('Loading waveform\u2026');
   try {
-    const arrBuf = await pendingWavBlob.arrayBuffer();
+    const arrBuf = await srcBlob.arrayBuffer();
     const actx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
     if (actx.state === 'suspended') await actx.resume();
     trimAudioBuffer = await actx.decodeAudioData(arrBuf);
@@ -2204,9 +2213,12 @@ async function openTrimmer() {
   }
   stopTrimPlay();
   if (trimAudioSrc) { URL.revokeObjectURL(trimAudioSrc); trimAudioSrc = null; }
-  trimAudioSrc = URL.createObjectURL(pendingWavBlob);
+  trimAudioSrc = URL.createObjectURL(srcBlob);
   trimStartPct = 0; trimEndPct = 1;
-  document.getElementById('saveOverlay').classList.remove('open');
+  document.getElementById('trim-btns-new').style.display = trimTarget ? 'none' : 'flex';
+  document.getElementById('trim-btns-track').style.display = trimTarget ? 'flex' : 'none';
+  document.getElementById('trim-busy').style.display = 'none';
+  if (!trimTarget) document.getElementById('saveOverlay').classList.remove('open');
   document.getElementById('trimOverlay').classList.add('open');
   // Draw right away, then again as the sheet finishes sliding in
   // (width can read 0 or wrong mid-animation, which left the canvas blank)
@@ -2382,7 +2394,115 @@ function cancelTrim() {
   if (trimAudioSrc) { URL.revokeObjectURL(trimAudioSrc); trimAudioSrc = null; }
   trimAudioBuffer = null;
   document.getElementById('trimOverlay').classList.remove('open');
+  if (trimTarget) { trimTarget = null; return; }   // trimming a saved track: nothing else to reopen
   showSaveOverlay();
+}
+
+// ── Trim a track that is already saved ──
+async function openTrackTrimmer() {
+  const songId = editingTrackSongId, trackId = editingTrackId;
+  const song = songs.find(s => s.id === songId);
+  const track = song?.tracks.find(t => t.id === trackId);
+  if (!track?.audioId) { toast('This track has no recording'); return; }
+  const rec = await dbGet('audio', track.audioId);
+  if (!rec) { toast('Recording not found'); return; }
+  closeSheet('editTrack');
+  trimTarget = { songId, trackId, isVideo: !!track.isVideo, blob: rec.blob };
+  await openTrimmer(rec.blob);
+  if (!trimAudioBuffer) trimTarget = null;          // could not load: stay out of track mode
+}
+
+function setTrimBusy(msg) {
+  const b = document.getElementById('trim-busy');
+  b.style.display = msg ? 'block' : 'none'; b.textContent = msg || '';
+  document.getElementById('trim-btns-track').style.display = msg ? 'none' : 'flex';
+}
+
+// Re-record just the chosen part of a video. Runs at normal speed (a 20 s clip takes ~20 s).
+async function trimVideoBlob(blob, startSec, endSec, onProgress) {
+  const url = URL.createObjectURL(new Blob([await blob.arrayBuffer()], { type: blob.type || 'video/webm' }));
+  const v = document.createElement('video');
+  v.playsInline = true; v.preload = 'auto'; v.src = url;
+  await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('Cannot read video')); });
+  if (!isFinite(v.duration)) {                        // webm from the recorder has no length: force it
+    await new Promise(res => { v.ontimeupdate = () => { v.ontimeupdate = null; res(); }; v.currentTime = 1e9; });
+  }
+  await new Promise(res => { v.onseeked = () => { v.onseeked = null; res(); }; v.currentTime = startSec; });
+  const actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') await actx.resume();
+  const dest = actx.createMediaStreamDestination();
+  const src = actx.createMediaElementSource(v);
+  src.connect(dest);                                   // sound goes to the recorder, not the speaker
+  const vStream = v.captureStream ? v.captureStream() : null;
+  if (!vStream) throw new Error('This browser cannot trim video');
+  const stream = new MediaStream([...vStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  const mime = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 });
+  const chunks = []; rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  const done = new Promise(res => { rec.onstop = res; });
+  rec.start(200);
+  await v.play();
+  await new Promise(res => {
+    const tick = () => {
+      if (onProgress) onProgress(Math.min(1, (v.currentTime - startSec) / (endSec - startSec)));
+      if (v.currentTime >= endSec || v.ended) res(); else setTimeout(tick, 100);
+    };
+    tick();
+  });
+  v.pause(); rec.stop(); await done;
+  stream.getTracks().forEach(t => t.stop()); try { actx.close(); } catch (e) {}
+  URL.revokeObjectURL(url);
+  return new Blob(chunks, { type: mime || 'video/webm' });
+}
+
+async function applyTrackTrim(replace) {
+  if (!trimTarget || !trimAudioBuffer) return;
+  stopTrimPlay();
+  const { songId, trackId, isVideo, blob } = trimTarget;
+  const song = songs.find(s => s.id === songId);
+  const track = song?.tracks.find(t => t.id === trackId);
+  if (!track) { cancelTrim(); return; }
+  const dur = trimAudioBuffer.duration;
+  const startSec = trimStartPct * dur, endSec = trimEndPct * dur;
+  const lenSec = Math.max(1, Math.round(endSec - startSec));
+  if (replace && !confirm('Replace the original recording with the trimmed version? The cut-off parts cannot be recovered.')) return;
+  try {
+    let outBlob;
+    if (isVideo) {
+      setTrimBusy('Trimming video… 0%');
+      outBlob = await trimVideoBlob(blob, startSec, endSec, p => setTrimBusy('Trimming video… ' + Math.round(p * 100) + '% (keep this screen open)'));
+    } else {
+      setTrimBusy('Trimming…');
+      const sr = trimAudioBuffer.sampleRate, ch = trimAudioBuffer.numberOfChannels;
+      const a = Math.floor(trimStartPct * dur * sr), b = Math.floor(trimEndPct * dur * sr);
+      const actx = new (window.AudioContext || window.webkitAudioContext)();
+      const trimmed = actx.createBuffer(ch, b - a, sr);
+      for (let c = 0; c < ch; c++) trimmed.copyToChannel(trimAudioBuffer.getChannelData(c).slice(a, b), c);
+      actx.close();
+      outBlob = new Blob([audioBufferToWav(trimmed)], { type: 'audio/wav' });
+    }
+    const newAudioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
+    await dbPut('audio', { id: newAudioId, blob: outBlob, isVideo });   // write the new file first
+    const durStr = Math.floor(lenSec / 60) + ':' + String(lenSec % 60).padStart(2, '0');
+    const snapshot = songs;
+    if (replace) {
+      songs = songs.map(s => s.id !== songId ? s : { ...s, tracks: s.tracks.map(t => t.id !== trackId ? t : { ...t, audioId: newAudioId, dur: durStr }) });
+    } else {
+      songs = songs.map(s => s.id !== songId ? s : { ...s, tracks: s.tracks.flatMap(t => t.id !== trackId ? [t] :
+        [t, { ...t, id: 't' + Date.now(), name: t.name + ' (trimmed)', audioId: newAudioId, dur: durStr }]) });
+    }
+    try { await saveSongs(); }
+    catch (e) { songs = snapshot; try { await dbDelete('audio', newAudioId); } catch (e2) {} throw e; }
+    if (replace && track.audioId) { mp3Cache.delete(track.audioId); await dbDelete('audio', track.audioId); }   // only after everything is saved
+    setTrimBusy('');
+    cancelTrim();
+    renderAll();
+    toast(replace ? 'Trimmed ✓' : 'Trimmed copy added ✓');
+  } catch (e) {
+    console.error(e);
+    setTrimBusy('');
+    alert('Could not trim: ' + (e && e.message ? e.message : e) + '\n\nYour original recording is unchanged.');
+  }
 }
 
 function openManage(kind) {
