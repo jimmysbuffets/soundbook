@@ -325,7 +325,18 @@ body {
 #cam-preview-wrap.visible { display: block; }
 #cam-preview {
   width: 100%; height: 100%;
-  object-fit: cover; background: #000; display: block;
+  object-fit: contain; background: #000; display: block;
+}
+/* While recording video the bar only needs the video button; in landscape it becomes a side strip */
+body.vidrec #tag-btn, body.vidrec #rec-btn { display: none; }
+@media (orientation: landscape) {
+  body.vidrec #rec-bar {
+    top: 0; bottom: 0; left: auto; right: 0; width: 110px;
+    background: rgba(0,0,0,0.45); border: none;
+    padding: 10px 12px; justify-content: center;
+  }
+  body.vidrec #rec-row { flex-direction: column; }
+  body.vidrec #cam-hint { right: 110px; }
 }
 #cam-hint {
   position: absolute; bottom: calc(16px + var(--safe-bottom)); left: 0; right: 0;
@@ -761,6 +772,8 @@ select.finput { appearance: none; }
     </div>
     <label class="flabel">Track name</label>
     <input id="editTrackName" class="finput" />
+    <label class="flabel" style="margin-top:12px">Song</label>
+    <select id="editTrackSong" class="finput"></select>
     <div class="tag-sect-lbl type" style="margin-top:12px">
       <span>Type</span>
       <span class="manage-lnk" onclick="openManage('type')">manage</span>
@@ -965,6 +978,7 @@ async function toggleRecord(mode) {
       document.getElementById('cam-preview-wrap').classList.remove('visible');
       const preview = document.getElementById('cam-preview');
       preview.srcObject = null;
+      exitVideoLandscape();
     }
 
     const activeBtn = recordingMode === 'video'
@@ -1001,6 +1015,8 @@ async function toggleRecord(mode) {
   recordingMode = mode;
   const isVideo = mode === 'video';
 
+  if (isVideo) { document.body.classList.add('vidrec'); await enterVideoLandscape(); }
+
   try {
     recStream = await navigator.mediaDevices.getUserMedia(isVideo
       ? {
@@ -1021,6 +1037,7 @@ async function toggleRecord(mode) {
       );
     } catch(e2) {
       toast(isVideo ? 'Camera/mic access denied' : 'Microphone access denied');
+      if (isVideo) exitVideoLandscape();
       return;
     }
   }
@@ -1088,6 +1105,29 @@ function animateWaveform() {
     b.style.height = Math.max(3, val * 22) + 'px';
   });
   animFrame = requestAnimationFrame(animateWaveform);
+}
+
+// ── Video orientation ──
+// Video is recorded sideways (landscape). Locking to "landscape" lets the phone flip
+// between the two landscape directions, so the picture is always the right way up.
+async function enterVideoLandscape() {
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen)
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+  } catch (e) {}
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock('landscape');
+      await new Promise(r => setTimeout(r, 400));   // let the screen finish rotating
+      return;
+    }
+  } catch (e) {}
+  toast('Turn on auto-rotate and hold your phone sideways');
+}
+function exitVideoLandscape() {
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
+  try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); } catch (e) {}
+  document.body.classList.remove('vidrec');
 }
 
 // ── Save ──
@@ -1689,6 +1729,9 @@ function openEditTrack(songId, trackId) {
   if (!track) return;
   editingTrackSongId = songId; editingTrackId = trackId;
   document.getElementById('editTrackName').value = track.name;
+  document.getElementById('editTrackSong').innerHTML = songs.map(s =>
+    `<option value="${esc(s.id)}"${s.id === songId ? ' selected' : ''}>${esc(s.title)} (${s.tracks.length} track${s.tracks.length === 1 ? '' : 's'})</option>`
+  ).join('');
   // Populate type tag grid with current track selections
   const grid = document.getElementById('editTrackTypeGrid');
   const current = track.typeTags || [];
@@ -1701,15 +1744,33 @@ function openEditTrack(songId, trackId) {
 async function saveTrackEdit() {
   const name = document.getElementById('editTrackName').value.trim();
   const selectedTypes = Array.from(document.querySelectorAll('#editTrackTypeGrid .stag.st')).map(el => el.textContent);
-  songs = songs.map(s => s.id === editingTrackSongId
-    ? { ...s, tracks: s.tracks.map(t => t.id === editingTrackId
-        ? { ...t, name: name || t.name, typeTags: selectedTypes }
-        : t) }
-    : s);
+  const targetId = document.getElementById('editTrackSong').value || editingTrackSongId;
+  const fromSong = songs.find(s => s.id === editingTrackSongId);
+  const toSong = songs.find(s => s.id === targetId);
+  const oldTrack = fromSong?.tracks.find(t => t.id === editingTrackId);
+  if (!fromSong || !toSong || !oldTrack) { closeSheet('editTrack'); return; }
+  const updated = { ...oldTrack, name: name || oldTrack.name, typeTags: selectedTypes };
+
+  if (targetId === editingTrackSongId) {
+    songs = songs.map(s => s.id === targetId
+      ? { ...s, tracks: s.tracks.map(t => t.id === editingTrackId ? updated : t) } : s);
+  } else {
+    // Move the track (its recording stays exactly as it is) to the other song
+    songs = songs.map(s => {
+      if (s.id === editingTrackSongId) return { ...s, tracks: s.tracks.filter(t => t.id !== editingTrackId) };
+      if (s.id === targetId) return { ...s, tracks: [...s.tracks, updated] };
+      return s;
+    });
+  }
   await saveSongs();
   closeSheet('editTrack');
+  const emptied = targetId !== editingTrackSongId && fromSong.tracks.length === 1;
+  if (emptied && confirm(`"${fromSong.title}" has no tracks left. Delete that empty song?`)) {
+    songs = songs.filter(s => s.id !== fromSong.id);
+    await saveSongs();
+  }
   renderAll();
-  toast('Track updated');
+  toast(targetId === editingTrackSongId ? 'Track updated' : `Moved to "${toSong.title}"`);
 }
 
 async function deleteTrack(songId, trackId) {
