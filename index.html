@@ -323,9 +323,14 @@ body {
   background: #000;
 }
 #cam-preview-wrap.visible { display: block; }
-#cam-preview {
-  width: 100%; height: 100%;
-  object-fit: contain; background: #000; display: block;
+#cam-preview { position: absolute; width: 2px; height: 2px; opacity: 0; pointer-events: none; }   /* hidden camera source */
+#cam-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; background: #000; display: block;      /* shows exactly what is being recorded */
+}
+#rot-btn {
+  position: absolute; top: 14px; left: 14px; z-index: 101; width: 44px; height: 44px; border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.45); color: #fff; font-size: 22px;
 }
 /* While recording video the bar only needs the video button; in landscape it becomes a side strip */
 body.vidrec #tag-btn, body.vidrec #rec-btn { display: none; }
@@ -578,6 +583,8 @@ select.finput { appearance: none; }
 <!-- Camera preview (full screen, shown while video recording) -->
 <div id="cam-preview-wrap">
   <video id="cam-preview" autoplay muted playsinline></video>
+  <canvas id="cam-canvas" width="1280" height="720"></canvas>
+  <button id="rot-btn" onclick="rotateVideoManually()" aria-label="Rotate picture 90 degrees">↻</button>
   <div id="cam-hint">recording video — tap ■ to stop</div>
 </div>
 
@@ -992,8 +999,7 @@ async function _toggleRecord(mode) {
     // Hide camera preview if video
     if (recordingMode === 'video') {
       document.getElementById('cam-preview-wrap').classList.remove('visible');
-      const preview = document.getElementById('cam-preview');
-      preview.srcObject = null;
+      stopCamPipeline();
       exitVideoLandscape();
     }
 
@@ -1038,7 +1044,7 @@ async function _toggleRecord(mode) {
       ? {
           audio: { sampleRate: 48000, sampleSize: 16, channelCount: 1,
                    echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-          video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } }
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
         }
       : {
           audio: { sampleRate: 48000, sampleSize: 16, channelCount: 1,
@@ -1058,11 +1064,11 @@ async function _toggleRecord(mode) {
     }
   }
 
-  // Show camera preview for video
+  // Video: show the widescreen canvas (what you see is what is recorded)
+  let recorderStream = recStream;
   if (isVideo) {
-    const preview = document.getElementById('cam-preview');
-    preview.srcObject = recStream;
     document.getElementById('cam-preview-wrap').classList.add('visible');
+    recorderStream = await startCamPipeline(recStream);
   }
 
   // Waveform analyser (audio only — too costly during video)
@@ -1086,7 +1092,7 @@ async function _toggleRecord(mode) {
     ? { mimeType, audioBitsPerSecond: 128000, ...(isVideo ? { videoBitsPerSecond: 2500000 } : {}) }
     : { audioBitsPerSecond: 128000 };
 
-  mediaRecorder = new MediaRecorder(recStream, recOpts);
+  mediaRecorder = new MediaRecorder(recorderStream, recOpts);
   mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
   mediaRecorder.start(100);
 
@@ -1124,35 +1130,83 @@ function animateWaveform() {
   animFrame = requestAnimationFrame(animateWaveform);
 }
 
-// ── Video orientation ──
-// Video is recorded sideways (landscape). Locking to "landscape" lets the phone flip
-// between the two landscape directions, so the picture is always the right way up.
-async function enterVideoLandscape() {
-  try {
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen)
-      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-  } catch (e) {}
-  try {
-    if (screen.orientation && screen.orientation.lock) {
-      await screen.orientation.lock('landscape');
-      await waitForSteadyLandscape();                // open the camera only after the screen has finished turning
-      return;
+// ── Video: always widescreen, always upright ──
+// Frames from the camera are drawn onto a fixed 1280x720 canvas and the canvas is what gets
+// recorded. The picture is turned to match how the phone is physically held (motion sensor),
+// so the file stays 16:9 and the right way up even if you rotate the phone while recording.
+const VID_W = 1280, VID_H = 720;
+let camActive = false, camLoopId = null, camCtx = null, compStream = null;
+let tiltQ = 0, tiltPending = null, tiltSince = 0, sensorSeen = false, angleSign = 1, vidRotOffset = 0, tiltHandler = null;
+
+function screenAngle() {
+  try { if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle; } catch (e) {}
+  return typeof window.orientation === 'number' ? ((window.orientation % 360) + 360) % 360 : 0;
+}
+function startTiltSensor() {
+  sensorSeen = false; tiltQ = 0; tiltPending = null;
+  tiltHandler = ev => {
+    const g = ev.accelerationIncludingGravity;
+    if (!g || g.x == null || g.y == null) return;
+    if (Math.hypot(g.x, g.y) < 3) return;                 // phone lying flat: no clear "up"
+    sensorSeen = true;
+    const phi = Math.atan2(g.x, g.y) * 180 / Math.PI;      // 0 = upright, +90 = turned counter-clockwise
+    const q = ((Math.round(phi / 90) * 90) % 360 + 360) % 360;
+    if (Math.abs(phi - Math.round(phi / 90) * 90) > 35) return;   // between positions: wait
+    if (q === tiltQ) { tiltPending = null; return; }
+    if (tiltPending !== q) { tiltPending = q; tiltSince = Date.now(); return; }
+    if (Date.now() - tiltSince >= 300) {                   // held steady: accept the new position
+      tiltQ = q; tiltPending = null;
+      const A = screenAngle();                            // learn which way the screen angle counts
+      if (A === 90 || A === 270) angleSign = (q === A) ? 1 : (q === (360 - A) % 360 ? -1 : angleSign);
     }
-  } catch (e) {}
-  toast('Turn on auto-rotate and hold your phone sideways');
+  };
+  window.addEventListener('devicemotion', tiltHandler);
 }
-// If the screen is still turning when the camera starts, the picture changes shape mid-recording,
-// which can break the video file. So wait until the screen is landscape and has stopped changing.
-async function waitForSteadyLandscape(maxMs = 2000) {
-  const t0 = Date.now(); let lastW = -1, lastH = -1, steadySince = 0;
-  while (Date.now() - t0 < maxMs) {
-    const w = window.innerWidth, h = window.innerHeight;
-    if (w !== lastW || h !== lastH) { lastW = w; lastH = h; steadySince = Date.now(); }
-    if (w > h && Date.now() - steadySince >= 350) return true;
-    await new Promise(r => setTimeout(r, 50));
-  }
-  return false;
+function stopTiltSensor() { if (tiltHandler) window.removeEventListener('devicemotion', tiltHandler); tiltHandler = null; }
+// clockwise turn (0/90/180/270) to apply to a picture that is upright relative to the screen
+function currentRotation() {
+  const base = sensorSeen ? tiltQ - angleSign * screenAngle() : 0;
+  return (((base + vidRotOffset) % 360) + 360) % 360;
 }
+function drawFrame(ctx, src, sw, sh, R) {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, VID_W, VID_H);
+  const rw = (R % 180) ? sh : sw, rh = (R % 180) ? sw : sh;
+  const s = Math.min(VID_W / rw, VID_H / rh);
+  ctx.save();
+  ctx.translate(VID_W / 2, VID_H / 2);
+  ctx.rotate(R * Math.PI / 180);
+  ctx.drawImage(src, -sw * s / 2, -sh * s / 2, sw * s, sh * s);
+  ctx.restore();
+}
+function camLoop() {
+  if (!camActive) return;
+  const v = document.getElementById('cam-preview');
+  if (v.videoWidth) drawFrame(camCtx, v, v.videoWidth, v.videoHeight, currentRotation());
+  camLoopId = requestAnimationFrame(camLoop);
+}
+async function startCamPipeline(camStream) {
+  const v = document.getElementById('cam-preview');
+  v.srcObject = camStream;
+  try { await v.play(); } catch (e) {}
+  for (let i = 0; i < 40 && !v.videoWidth; i++) await new Promise(r => setTimeout(r, 50));   // wait for the first frame
+  const cv = document.getElementById('cam-canvas');
+  cv.width = VID_W; cv.height = VID_H;
+  camCtx = cv.getContext('2d');
+  startTiltSensor();
+  camActive = true; camLoop();
+  const out = cv.captureStream(30);
+  compStream = new MediaStream([...out.getVideoTracks(), ...camStream.getAudioTracks()]);
+  return compStream;
+}
+function stopCamPipeline() {
+  camActive = false; if (camLoopId) cancelAnimationFrame(camLoopId); camLoopId = null;
+  stopTiltSensor();
+  if (compStream) { compStream.getVideoTracks().forEach(t => t.stop()); compStream = null; }
+  const v = document.getElementById('cam-preview'); v.srcObject = null;
+}
+function rotateVideoManually() { vidRotOffset = (vidRotOffset + 90) % 360; toast('Picture turned'); }
+async function enterVideoLandscape() {}
+
 function checkVideoBlob(blob) {
   return new Promise(res => {
     const v = document.createElement('video'); v.muted = true; v.preload = 'metadata';
@@ -1165,8 +1219,6 @@ function checkVideoBlob(blob) {
   });
 }
 function exitVideoLandscape() {
-  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
-  try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); } catch (e) {}
   document.body.classList.remove('vidrec');
 }
 
