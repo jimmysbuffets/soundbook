@@ -785,7 +785,7 @@ select.finput { appearance: none; }
       <span class="manage-lnk" onclick="openManage('type')">manage</span>
     </div>
     <div class="stag-grid" id="editTrackTypeGrid"></div>
-    <button class="save-btn" onclick="openTrackTrimmer()" style="margin-top:16px;background:transparent;border:1.5px solid var(--acc);color:var(--acc)">✂ Trim this recording</button>
+    <button id="editTrackTrimBtn" class="save-btn" onclick="openTrackTrimmer()" style="margin-top:16px;background:transparent;border:1.5px solid var(--acc);color:var(--acc)">✂ Trim this recording</button>
     <button class="save-btn" onclick="saveTrackEdit()" style="margin-top:10px">Save</button>
   </div>
 </div>
@@ -970,7 +970,16 @@ async function webmToWav(webmBlob) {
 // ── Recording ──
 let recordingMode = null; // 'audio' | 'video'
 
+// Ignore extra taps while a recording is still starting (the screen may be turning sideways)
+let recStarting = false;
 async function toggleRecord(mode) {
+  if (recStarting) return;
+  if (recording) return _toggleRecord(mode);
+  recStarting = true;
+  try { await _toggleRecord(mode); } finally { recStarting = false; }
+}
+
+async function _toggleRecord(mode) {
   // If already recording anything, stop it regardless of which button tapped
   if (recording) {
     mediaRecorder.stop();
@@ -1096,8 +1105,9 @@ async function toggleRecord(mode) {
   timer.classList.add(isVideo ? 'vis-vid' : 'vis-red');
   document.getElementById('rec-ctx').textContent = isVideo ? 'recording video…' : 'recording…';
 
+  const recStartedAt = Date.now();
   recInt = setInterval(() => {
-    recSecs++;
+    recSecs = Math.floor((Date.now() - recStartedAt) / 1000);
     timer.textContent = Math.floor(recSecs/60) + ':' + String(recSecs%60).padStart(2,'0');
   }, 1000);
 }
@@ -1125,11 +1135,34 @@ async function enterVideoLandscape() {
   try {
     if (screen.orientation && screen.orientation.lock) {
       await screen.orientation.lock('landscape');
-      await new Promise(r => setTimeout(r, 400));   // let the screen finish rotating
+      await waitForSteadyLandscape();                // open the camera only after the screen has finished turning
       return;
     }
   } catch (e) {}
   toast('Turn on auto-rotate and hold your phone sideways');
+}
+// If the screen is still turning when the camera starts, the picture changes shape mid-recording,
+// which can break the video file. So wait until the screen is landscape and has stopped changing.
+async function waitForSteadyLandscape(maxMs = 2000) {
+  const t0 = Date.now(); let lastW = -1, lastH = -1, steadySince = 0;
+  while (Date.now() - t0 < maxMs) {
+    const w = window.innerWidth, h = window.innerHeight;
+    if (w !== lastW || h !== lastH) { lastW = w; lastH = h; steadySince = Date.now(); }
+    if (w > h && Date.now() - steadySince >= 350) return true;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return false;
+}
+function checkVideoBlob(blob) {
+  return new Promise(res => {
+    const v = document.createElement('video'); v.muted = true; v.preload = 'metadata';
+    const url = URL.createObjectURL(blob);
+    const done = r => { URL.revokeObjectURL(url); res(r); };
+    v.onloadedmetadata = () => done({ ok: true, w: v.videoWidth, h: v.videoHeight });
+    v.onerror = () => done({ ok: false, code: v.error ? v.error.code : '?' });
+    setTimeout(() => done({ ok: false, code: 'timeout' }), 5000);
+    v.src = url;
+  });
 }
 function exitVideoLandscape() {
   try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
@@ -1162,8 +1195,13 @@ async function saveMemo() {
     if (pendingWavBlob) {
       audioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
       await dbPut('audio', { id: audioId, blob: pendingWavBlob, isVideo });
+      // Read it back: make sure what was stored is complete and readable (low storage can break this)
+      const back = await dbGet('audio', audioId);
+      if (!back || !back.blob || back.blob.size !== pendingWavBlob.size) throw new Error('Saved copy is incomplete');
+      if (isVideo) { const c = await checkVideoBlob(back.blob); if (!c.ok) throw new Error('Saved video is unreadable'); }
     }
   } catch (err) {
+    if (audioId) { try { await dbDelete('audio', audioId); } catch (e) {} }
     console.error(err);
     alert('Could not save the recording — your phone is probably out of storage.\n\nThe save sheet is still open. Free up space, then tap Save again.');
     return;
@@ -1736,6 +1774,7 @@ function openEditTrack(songId, trackId) {
   if (!track) return;
   editingTrackSongId = songId; editingTrackId = trackId;
   document.getElementById('editTrackName').value = track.name;
+  document.getElementById('editTrackTrimBtn').style.display = track.isVideo ? 'none' : 'block';   // audio only
   document.getElementById('editTrackSong').innerHTML = songs.map(s =>
     `<option value="${esc(s.id)}"${s.id === songId ? ' selected' : ''}>${esc(s.title)} (${s.tracks.length} track${s.tracks.length === 1 ? '' : 's'})</option>`
   ).join('');
@@ -2023,6 +2062,12 @@ async function openSaveSheet() {
       }
     } else {
       pendingWavBlob = rawBlob;
+      const chk = await checkVideoBlob(rawBlob);
+      if (!chk.ok || !chk.w) {
+        alert('This video looks damaged and probably will not play.\n\n' +
+              'Details: ' + Math.round(rawBlob.size / 1024) + ' KB, type "' + (rawBlob.type || 'none') + '", error ' + (chk.code || 'no picture') +
+              '.\n\nTap Discard and record again. If it keeps happening, tell Claude these details.');
+      }
     }
   }
 
@@ -2404,6 +2449,7 @@ async function openTrackTrimmer() {
   const song = songs.find(s => s.id === songId);
   const track = song?.tracks.find(t => t.id === trackId);
   if (!track?.audioId) { toast('This track has no recording'); return; }
+  if (track.isVideo) { toast('Trimming is for audio tracks only'); return; }
   const rec = await dbGet('audio', track.audioId);
   if (!rec) { toast('Recording not found'); return; }
   closeSheet('editTrack');
@@ -2418,71 +2464,27 @@ function setTrimBusy(msg) {
   document.getElementById('trim-btns-track').style.display = msg ? 'none' : 'flex';
 }
 
-// Re-record just the chosen part of a video. Runs at normal speed (a 20 s clip takes ~20 s).
-async function trimVideoBlob(blob, startSec, endSec, onProgress) {
-  const url = URL.createObjectURL(new Blob([await blob.arrayBuffer()], { type: blob.type || 'video/webm' }));
-  const v = document.createElement('video');
-  v.playsInline = true; v.preload = 'auto'; v.src = url;
-  await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('Cannot read video')); });
-  if (!isFinite(v.duration)) {                        // webm from the recorder has no length: force it
-    await new Promise(res => { v.ontimeupdate = () => { v.ontimeupdate = null; res(); }; v.currentTime = 1e9; });
-  }
-  await new Promise(res => { v.onseeked = () => { v.onseeked = null; res(); }; v.currentTime = startSec; });
-  const actx = new (window.AudioContext || window.webkitAudioContext)();
-  if (actx.state === 'suspended') await actx.resume();
-  const dest = actx.createMediaStreamDestination();
-  const src = actx.createMediaElementSource(v);
-  src.connect(dest);                                   // sound goes to the recorder, not the speaker
-  const vStream = v.captureStream ? v.captureStream() : null;
-  if (!vStream) throw new Error('This browser cannot trim video');
-  const stream = new MediaStream([...vStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
-  const mime = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '';
-  const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 });
-  const chunks = []; rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-  const done = new Promise(res => { rec.onstop = res; });
-  rec.start(200);
-  await v.play();
-  await new Promise(res => {
-    const tick = () => {
-      if (onProgress) onProgress(Math.min(1, (v.currentTime - startSec) / (endSec - startSec)));
-      if (v.currentTime >= endSec || v.ended) res(); else setTimeout(tick, 100);
-    };
-    tick();
-  });
-  v.pause(); rec.stop(); await done;
-  stream.getTracks().forEach(t => t.stop()); try { actx.close(); } catch (e) {}
-  URL.revokeObjectURL(url);
-  return new Blob(chunks, { type: mime || 'video/webm' });
-}
-
 async function applyTrackTrim(replace) {
   if (!trimTarget || !trimAudioBuffer) return;
   stopTrimPlay();
-  const { songId, trackId, isVideo, blob } = trimTarget;
+  const { songId, trackId } = trimTarget;
   const song = songs.find(s => s.id === songId);
   const track = song?.tracks.find(t => t.id === trackId);
   if (!track) { cancelTrim(); return; }
   const dur = trimAudioBuffer.duration;
-  const startSec = trimStartPct * dur, endSec = trimEndPct * dur;
-  const lenSec = Math.max(1, Math.round(endSec - startSec));
+  const lenSec = Math.max(1, Math.round((trimEndPct - trimStartPct) * dur));
   if (replace && !confirm('Replace the original recording with the trimmed version? The cut-off parts cannot be recovered.')) return;
   try {
-    let outBlob;
-    if (isVideo) {
-      setTrimBusy('Trimming video… 0%');
-      outBlob = await trimVideoBlob(blob, startSec, endSec, p => setTrimBusy('Trimming video… ' + Math.round(p * 100) + '% (keep this screen open)'));
-    } else {
-      setTrimBusy('Trimming…');
-      const sr = trimAudioBuffer.sampleRate, ch = trimAudioBuffer.numberOfChannels;
-      const a = Math.floor(trimStartPct * dur * sr), b = Math.floor(trimEndPct * dur * sr);
-      const actx = new (window.AudioContext || window.webkitAudioContext)();
-      const trimmed = actx.createBuffer(ch, b - a, sr);
-      for (let c = 0; c < ch; c++) trimmed.copyToChannel(trimAudioBuffer.getChannelData(c).slice(a, b), c);
-      actx.close();
-      outBlob = new Blob([audioBufferToWav(trimmed)], { type: 'audio/wav' });
-    }
-    const newAudioId = (isVideo ? 'vid_' : 'audio_') + Date.now();
-    await dbPut('audio', { id: newAudioId, blob: outBlob, isVideo });   // write the new file first
+    setTrimBusy('Trimming…');
+    const sr = trimAudioBuffer.sampleRate, ch = trimAudioBuffer.numberOfChannels;
+    const a = Math.floor(trimStartPct * dur * sr), b = Math.floor(trimEndPct * dur * sr);
+    const actx = new (window.AudioContext || window.webkitAudioContext)();
+    const trimmed = actx.createBuffer(ch, b - a, sr);
+    for (let c = 0; c < ch; c++) trimmed.copyToChannel(trimAudioBuffer.getChannelData(c).slice(a, b), c);
+    actx.close();
+    const outBlob = new Blob([audioBufferToWav(trimmed)], { type: 'audio/wav' });
+    const newAudioId = 'audio_' + Date.now();
+    await dbPut('audio', { id: newAudioId, blob: outBlob, isVideo: false });   // write the new file first
     const durStr = Math.floor(lenSec / 60) + ':' + String(lenSec % 60).padStart(2, '0');
     const snapshot = songs;
     if (replace) {
